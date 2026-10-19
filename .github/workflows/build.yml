@@ -1,41 +1,58 @@
-
 name: Construir APK de Vinilo
 
 on:
   push:
-    branches:
-      - main
-  workflow_dispatch:
-
-permissions:
-  contents: read
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
 
 jobs:
   build:
-    name: Compilar aplicación Android
+    name: Build APK
     runs-on: ubuntu-latest
+    env:
+      # opcional, se puede usar si alguna tarea lo necesita
+      ANDROID_SDK_ROOT: /usr/local/android-sdk
 
     steps:
-      - name: Descargar código
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Instalar Java 17
+      - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
-          distribution: temurin
+          distribution: 'temurin'
           java-version: '17'
 
-      - name: Configurar Gradle
-        uses: gradle/actions/setup-gradle@v4
+      - name: Cache Gradle
+        uses: actions/cache@v4
         with:
-          gradle-version: '8.11'
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper/
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/gradle/wrapper/gradle-wrapper.properties') }}-${{ hashFiles('**/*.gradle*', '**/*.gradle.kts') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
 
-      - name: Compilar APK
-        run: gradle assembleDebug
-
-      - name: Guardar APK
-        uses: actions/upload-artifact@v4
+      - name: Install Android SDK (build-tools + platform)
+        uses: android-actions/setup-sdk@v2
         with:
-          name: vinilo-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: error
+          api-levels: 33
+          components: build-tools;33.0.2,platforms;android-33
+
+      - name: Ensure Gradle 8.13 is available on runner
+        uses: gradle/gradle-build-action@v2
+        with:
+          gradle-version: '8.13'
+
+      - name: Make gradlew executable
+        run: chmod +x ./gradlew
+
+      - name: Update Gradle wrapper to 8.13 (in-run)
+        run: ./gradlew wrapper --gradle-version 8.13 --distribution-type bin
+
+      - name: Verify Gradle version
+        run: ./gradlew --version
+
+      - name: Build APK (release)
+        run: ./gradlew assembleRelease --no-daemon
