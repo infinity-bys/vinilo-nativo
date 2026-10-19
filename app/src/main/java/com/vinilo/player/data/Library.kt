@@ -2,6 +2,7 @@ package com.vinilo.player.data
 
 import android.content.ContentUris
 import android.content.Context
+import android.graphics.Bitmap
 import android.net.Uri
 import android.provider.MediaStore
 import android.util.LruCache
@@ -54,6 +55,33 @@ object Library {
     )
     private val voiceMime = Regex("amr|3gpp", RegexOption.IGNORE_CASE)
     private val extension = Regex("\\.[^.]+$")
+
+    private val cleanBracket = Regex(
+        "\\s*[(\\[][^)\\]]*?(?<![a-z])(mp3|audio|\\d{2,3}\\s?k(bps)?|official|oficial|lyrics?|letra|video|v\u00eddeo|hd|hq)(?![a-z])[^)\\]]*[)\\]]",
+        RegexOption.IGNORE_CASE
+    )
+    private val trailKbps = Regex("[\\s-]*\\b\\d{2,3}\\s?k(bps)?\\s*$", RegexOption.IGNORE_CASE)
+    private val multiSpace = Regex("\\s{2,}")
+    private val dash = Regex("\\s[-\u2013]\\s")
+
+    /** Quita basura de los nombres: (Official Video), _, 320kbps, etc. */
+    fun clean(n: String): String {
+        val r = n.replace(cleanBracket, " ").replace('_', ' ').replace(trailKbps, "")
+            .replace(multiSpace, " ").trim()
+        return if (r.isEmpty()) n else r
+    }
+
+    /** Devuelve (titulo, artista) ya limpios. Si no hay artista, intenta separar "Artista - Titulo". */
+    fun display(title: String, artist: String): Pair<String, String> {
+        val t = clean(title)
+        if (artist.isBlank()) {
+            val parts = t.split(dash)
+            if (parts.size > 1) {
+                return Pair(parts.drop(1).joinToString(" - ").trim(), parts[0].trim())
+            }
+        }
+        return Pair(t, artist)
+    }
 
     /** Devuelve el motivo por el que un audio no es musica, o "" si es musica. */
     private fun junkReason(name: String, path: String, mime: String, isMusic: Boolean, durationMs: Long): String {
@@ -109,8 +137,9 @@ object Library {
                 val mime = c.getString(iMime) ?: ""
                 val isMusic = c.getInt(iMusic) != 0
                 val duration = c.getLong(iDur)
-                val title = if (rawTitle.isNullOrBlank() || rawTitle == "<unknown>") name.replace(extension, "") else rawTitle
-                val artist = if (rawArtist.isNullOrBlank() || rawArtist == "<unknown>") "" else rawArtist
+                val title0 = if (rawTitle.isNullOrBlank() || rawTitle == "<unknown>") name.replace(extension, "") else rawTitle
+                val artist0 = if (rawArtist.isNullOrBlank() || rawArtist == "<unknown>") "" else rawArtist
+                val (title, artist) = display(title0, artist0)
                 list.add(
                     Song(
                         id = c.getLong(iId),
@@ -136,6 +165,7 @@ object Library {
 /** Guarda en memoria las caratulas ya leidas para que la lista no vaya lenta. */
 object CoverCache {
     private val cache = LruCache<Long, ImageBitmap>(150)
+    private val big = LruCache<Long, Bitmap>(6)
     private val missing = HashSet<Long>()
 
     fun get(id: Long): ImageBitmap? = cache.get(id)
@@ -150,6 +180,22 @@ object CoverCache {
             val image = bmp.asImageBitmap()
             cache.put(song.id, image)
             image
+        } catch (e: Exception) {
+            synchronized(missing) { missing.add(song.id) }
+            null
+        }
+    }
+
+    /** Caratula grande (512 px) para el disco y para sacar el color. */
+    fun loadBig(context: Context, song: Song): Bitmap? {
+        big.get(song.id)?.let { return it }
+        synchronized(missing) {
+            if (missing.contains(song.id)) return null
+        }
+        return try {
+            val bmp = context.contentResolver.loadThumbnail(song.uri, Size(512, 512), null)
+            big.put(song.id, bmp)
+            bmp
         } catch (e: Exception) {
             synchronized(missing) { missing.add(song.id) }
             null

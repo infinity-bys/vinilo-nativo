@@ -33,6 +33,11 @@ class MainActivity : ComponentActivity() {
         holder.resumeTick++
     }
 
+    override fun onStop() {
+        holder.saveLast()
+        super.onStop()
+    }
+
     override fun onDestroy() {
         holder.release()
         super.onDestroy()

@@ -16,6 +16,15 @@ object C {
     val Acc2 = Color(0xFFE8644F)
 }
 
+/** Colores del reproductor: por defecto los de siempre; cambian con la carátula. */
+data class Look(
+    val acc: Color = C.Acc,
+    val acc2: Color = C.Acc2,
+    val soft: Color = C.Text,
+    val top: Color = C.Bg,
+    val bottom: Color = C.Bg
+)
+
 @Composable
 fun VinyloTheme(content: @Composable () -> Unit) {
     MaterialTheme(

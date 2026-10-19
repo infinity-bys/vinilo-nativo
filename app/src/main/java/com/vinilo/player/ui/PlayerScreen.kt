@@ -1,0 +1,498 @@
+package com.vinilo.player.ui
+
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.basicMarquee
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.runtime.withFrameNanos
+import com.vinilo.player.PlayerHolder
+import com.vinilo.player.R
+import com.vinilo.player.data.Song
+import kotlin.math.max
+import kotlin.math.min
+import kotlin.math.sin
+
+// ---------------------------------------------------------------------------
+// Disco de vinilo que gira mientras suena
+// ---------------------------------------------------------------------------
+@Composable
+fun Disc(diameter: Dp, playing: Boolean, cover: ImageBitmap?, look: Look) {
+    val rot = remember { Animatable(0f) }
+    LaunchedEffect(playing) {
+        if (playing) {
+            while (true) {
+                rot.animateTo(rot.value + 360f, tween(6000, easing = LinearEasing))
+                rot.snapTo(rot.value % 360f)
+            }
+        }
+    }
+    Box(
+        Modifier
+            .size(diameter)
+            .shadow(16.dp, CircleShape)
+            .clip(CircleShape)
+            .graphicsLayer { rotationZ = rot.value },
+        contentAlignment = Alignment.Center
+    ) {
+        Canvas(Modifier.fillMaxSize()) {
+            val r = size.minDimension / 2f
+            drawCircle(Color(0xFF1D1528))
+            val step = 4.dp.toPx()
+            val sw = 2.dp.toPx()
+            var rad = sw
+            while (rad < r) {
+                drawCircle(Color(0xFF120D1A), radius = rad, style = Stroke(width = sw))
+                rad += step
+            }
+            val shine = Color(0x14FFFFFF)
+            drawCircle(
+                brush = Brush.sweepGradient(
+                    listOf(Color.Transparent, shine, Color.Transparent, Color.Transparent, shine, Color.Transparent, Color.Transparent)
+                ),
+                radius = r
+            )
+        }
+        // etiqueta central: caratula o degradado
+        Box(
+            Modifier
+                .size(diameter * 0.46f)
+                .clip(CircleShape)
+                .background(Brush.linearGradient(listOf(look.acc, look.acc2))),
+            contentAlignment = Alignment.Center
+        ) {
+            if (cover != null) {
+                Image(cover, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+            }
+        }
+        Box(
+            Modifier
+                .size(diameter * 0.08f)
+                .clip(CircleShape)
+                .background(C.Bg)
+        )
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Barras animadas (visualizador)
+// ---------------------------------------------------------------------------
+@Composable
+fun Bars(playing: Boolean, top: Color, bottom: Color, modifier: Modifier = Modifier) {
+    var t by remember { mutableFloatStateOf(0f) }
+    var level by remember { mutableFloatStateOf(0f) }
+    LaunchedEffect(playing) {
+        if (playing) {
+            while (true) {
+                withFrameNanos { n ->
+                    t = n / 1_000_000_000f
+                    level = min(1f, level + 0.05f)
+                }
+            }
+        } else {
+            while (level > 0f) {
+                withFrameNanos { level = max(0f, level - 0.06f) }
+            }
+        }
+    }
+    Canvas(modifier) {
+        val n = 28
+        val g = size.width / n
+        val bw = g * 0.62f
+        val brush = Brush.verticalGradient(listOf(top, bottom))
+        for (i in 0 until n) {
+            val a = sin(t * (2.1f + (i % 7) * 0.45f) + i * 1.3f) * 0.5f + 0.5f
+            val b = sin(t * 0.9f + i * 0.35f) * 0.5f + 0.5f
+            val env = 1f - (i.toFloat() / n) * 0.55f
+            val amp = (0.2f + 0.8f * a * (0.4f + 0.6f * b)) * env
+            val h = max(3.dp.toPx(), amp * level * size.height)
+            drawRoundRect(
+                brush = brush,
+                topLeft = Offset(i * g + (g - bw) / 2f, size.height - h),
+                size = Size(bw, h),
+                cornerRadius = CornerRadius(bw / 2f, bw / 2f)
+            )
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Barra de progreso
+// ---------------------------------------------------------------------------
+@Composable
+private fun SeekRow(holder: PlayerHolder, look: Look) {
+    var dragging by remember { mutableStateOf(false) }
+    var dragV by remember { mutableFloatStateOf(0f) }
+    val dur = holder.durationMs
+    val frac = if (dur > 0L) (holder.positionMs.toFloat() / dur).coerceIn(0f, 1f) else 0f
+    val shown = if (dragging) dragV else frac
+    val shownMs = if (dragging) (dragV * dur).toLong() else holder.positionMs
+    Row(
+        Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(fmtTime(shownMs), color = C.Mute, fontSize = 12.sp, modifier = Modifier.width(40.dp))
+        Slider(
+            value = shown,
+            onValueChange = {
+                dragging = true
+                dragV = it
+            },
+            onValueChangeFinished = {
+                holder.seekTo((dragV * dur).toLong())
+                dragging = false
+            },
+            modifier = Modifier.weight(1f),
+            colors = SliderDefaults.colors(
+                thumbColor = C.Text,
+                activeTrackColor = look.acc,
+                inactiveTrackColor = C.Line
+            )
+        )
+        Text(
+            fmtTime(dur),
+            color = C.Mute,
+            fontSize = 12.sp,
+            textAlign = TextAlign.End,
+            modifier = Modifier.width(40.dp)
+        )
+    }
+}
+
+private val modeNames = listOf("Repetir todas", "Repetir una", "Aleatorio")
+private val modeIcons = listOf(R.drawable.ic_repeat, R.drawable.ic_repeat_one, R.drawable.ic_shuffle)
+
+@Composable
+private fun Pill(icon: Int, text: String, on: Boolean, acc: Color, onClick: () -> Unit) {
+    val shape = RoundedCornerShape(26.dp)
+    Row(
+        Modifier
+            .height(52.dp)
+            .clip(shape)
+            .background(if (on) acc.copy(alpha = 0.14f) else C.Bg)
+            .border(1.dp, if (on) acc else C.Line, shape)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Icon(painterResource(icon), null, tint = if (on) acc else C.Mute, modifier = Modifier.size(22.dp))
+        Text(text, color = if (on) acc else C.Mute, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Pantalla completa del reproductor
+// ---------------------------------------------------------------------------
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+fun PlayerScreen(
+    holder: PlayerHolder,
+    song: Song?,
+    cover: ImageBitmap?,
+    look: Look,
+    isFav: Boolean,
+    onBack: () -> Unit,
+    onSettings: () -> Unit,
+    onMenu: () -> Unit,
+    onEq: () -> Unit,
+    onFav: () -> Unit,
+    onMode: () -> Unit
+) {
+    val store = holder.store
+    val bgTop by animateColorAsState(look.top, tween(600), label = "bgTop")
+    val bgBottom by animateColorAsState(look.bottom, tween(600), label = "bgBottom")
+    val eqOn = store.eq.any { it != 0 }
+    val sleepOn = holder.sleepEndAt > 0L || holder.sleepEot
+
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+    // el disco se achica en telefonos bajitos para que quepan todos los botones
+    val discSize = min(min(maxWidth.value * 0.72f, 290f), (maxHeight.value - 440f).coerceAtLeast(110f)).dp
+    Column(
+        Modifier
+            .fillMaxSize()
+            .background(Brush.verticalGradient(listOf(bgTop, bgBottom)))
+            .windowInsetsPadding(WindowInsets.safeDrawing)
+            .padding(horizontal = 22.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        // Barra superior: volver, titulo y ajustes
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(top = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconBtn(R.drawable.ic_chevron_down, "Volver a la lista", onBack, bg = C.Bg, size = 42.dp)
+            Text(
+                "Reproduciendo",
+                color = C.Mute,
+                fontSize = 14.sp,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.weight(1f)
+            )
+            IconBtn(
+                R.drawable.ic_tune, "Ajustes", onSettings,
+                tint = if (sleepOn) look.acc else C.Mute
+            )
+        }
+
+        Spacer(Modifier.weight(1f))
+
+        Disc(discSize, holder.isPlaying, cover, look)
+
+        Spacer(Modifier.height(14.dp))
+        Bars(holder.isPlaying, look.acc, look.acc2, Modifier.fillMaxWidth().height(42.dp))
+        Spacer(Modifier.height(10.dp))
+
+        val title = if (holder.title.isNotEmpty()) holder.title else song?.title ?: "Elige una canción"
+        val sub = when {
+            holder.artist.isNotEmpty() -> holder.artist
+            song != null -> fmtSize(song.size)
+            else -> "Tu música, sin conexión"
+        }
+        Text(
+            title,
+            color = C.Text,
+            fontFamily = FontFamily.Serif,
+            fontWeight = FontWeight.SemiBold,
+            fontSize = 22.sp,
+            maxLines = 1,
+            softWrap = false,
+            textAlign = TextAlign.Center,
+            modifier = Modifier
+                .fillMaxWidth()
+                .basicMarquee(iterations = Int.MAX_VALUE)
+        )
+        Text(
+            sub,
+            color = C.Mute,
+            fontSize = 13.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(top = 2.dp)
+        )
+
+        Spacer(Modifier.height(6.dp))
+        SeekRow(holder, look)
+
+        // Controles principales
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconBtn(
+                if (isFav) R.drawable.ic_heart else R.drawable.ic_heart_outline,
+                "Favorita", onFav,
+                tint = if (isFav) look.acc2 else C.Mute, size = 46.dp, iconSize = 24.dp
+            )
+            IconBtn(R.drawable.ic_prev, "Anterior", { holder.prev() }, tint = look.soft, size = 52.dp, iconSize = 28.dp)
+            Box(
+                Modifier
+                    .size(68.dp)
+                    .shadow(10.dp, CircleShape, ambientColor = look.acc2, spotColor = look.acc2)
+                    .clip(CircleShape)
+                    .background(Brush.linearGradient(listOf(look.acc, look.acc2)))
+                    .clickable { holder.toggle() },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    painterResource(if (holder.isPlaying) R.drawable.ic_pause else R.drawable.ic_play),
+                    if (holder.isPlaying) "Pausar" else "Reproducir",
+                    tint = C.Bg,
+                    modifier = Modifier.size(30.dp)
+                )
+            }
+            IconBtn(R.drawable.ic_next, "Siguiente", { holder.next() }, tint = look.soft, size = 52.dp, iconSize = 28.dp)
+            Box(contentAlignment = Alignment.TopEnd) {
+                IconBtn(
+                    R.drawable.ic_more, "Más opciones", onMenu,
+                    tint = if (store.speed != 1f) look.acc else C.Mute, size = 46.dp
+                )
+                if (store.speed != 1f) {
+                    Text(
+                        speedText(store.speed),
+                        color = C.Bg,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(look.acc)
+                            .padding(horizontal = 5.dp, vertical = 2.dp)
+                    )
+                }
+            }
+        }
+
+        Spacer(Modifier.weight(0.6f))
+
+        // Ecualizador y modo de reproduccion
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(bottom = 18.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Pill(R.drawable.ic_equalizer, "Ecualizador", eqOn, look.acc, onEq)
+            Pill(modeIcons[store.mode], modeNames[store.mode], store.mode > 0, look.acc, onMode)
+        }
+    }
+    }
+}
+
+fun speedText(v: Float): String = if (v == 1f) "Normal" else (v.toString().removeSuffix(".0") + "x")
+
+// ---------------------------------------------------------------------------
+// Mini reproductor (abajo de la lista)
+// ---------------------------------------------------------------------------
+@Composable
+fun MiniPlayer(holder: PlayerHolder, song: Song?, look: Look, onOpen: () -> Unit) {
+    val rot = remember { Animatable(0f) }
+    val playing = holder.isPlaying
+    LaunchedEffect(playing) {
+        if (playing) {
+            while (true) {
+                rot.animateTo(rot.value + 360f, tween(6000, easing = LinearEasing))
+                rot.snapTo(rot.value % 360f)
+            }
+        }
+    }
+    val dur = holder.durationMs
+    val frac = if (dur > 0L) (holder.positionMs.toFloat() / dur).coerceIn(0f, 1f) else 0f
+    val shape = RoundedCornerShape(22.dp)
+
+    Column(
+        Modifier
+            .padding(horizontal = 12.dp, vertical = 8.dp)
+            .fillMaxWidth()
+            .clip(shape)
+            .background(C.Panel)
+            .border(1.dp, C.Line, shape)
+    ) {
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(3.dp)
+                .background(C.Line)
+        ) {
+            Box(
+                Modifier
+                    .fillMaxWidth(frac)
+                    .fillMaxHeight()
+                    .background(Brush.horizontalGradient(listOf(look.acc, look.acc2)))
+            )
+        }
+        Row(
+            Modifier.padding(start = 10.dp, top = 8.dp, bottom = 8.dp, end = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(
+                Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(14.dp))
+                    .clickable(onClick = onOpen),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (song != null) {
+                    Cover(
+                        song, 44.dp,
+                        modifier = Modifier
+                            .border(4.dp, Color(0xFF120D1A), CircleShape)
+                            .graphicsLayer { rotationZ = rot.value },
+                        shape = CircleShape
+                    )
+                } else {
+                    Box(
+                        Modifier
+                            .size(44.dp)
+                            .clip(CircleShape)
+                            .background(Brush.linearGradient(listOf(look.acc, look.acc2)))
+                    )
+                }
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        if (holder.title.isNotEmpty()) holder.title else song?.title ?: "",
+                        color = C.Text,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text("Toca para abrir", color = C.Mute, fontSize = 12.sp)
+                }
+            }
+            Box(
+                Modifier
+                    .size(44.dp)
+                    .clip(CircleShape)
+                    .background(Brush.linearGradient(listOf(look.acc, look.acc2)))
+                    .clickable { holder.toggle() },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    painterResource(if (playing) R.drawable.ic_pause else R.drawable.ic_play),
+                    null, tint = C.Bg, modifier = Modifier.size(22.dp)
+                )
+            }
+            IconBtn(R.drawable.ic_next, "Siguiente", { holder.next() }, tint = look.soft, size = 44.dp, iconSize = 26.dp)
+        }
+    }
+}
