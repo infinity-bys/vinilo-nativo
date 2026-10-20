@@ -238,14 +238,14 @@ fun SettingsSheet(
             SheetRow("Temporizador de apagado", { page = "sleep" }, icon = R.drawable.ic_timer, value = sleepText)
             SheetRow(
                 "Botones con colores de la carátula",
-                { store.setAccentOn(!store.accentOn) },
+                { store.changeAccentOn(!store.accentOn) },
                 icon = R.drawable.ic_palette,
                 trailing = { Sw(store.accentOn) }
             )
             SheetRow(
                 "Ocultar audios que no son música",
                 {
-                    store.setAutoHide(!store.autoHide)
+                    store.changeAutoHide(!store.autoHide)
                     toast(if (store.autoHide) "Audios que no son música: ocultos" else "Mostrando todos los audios")
                 },
                 icon = R.drawable.ic_filter,

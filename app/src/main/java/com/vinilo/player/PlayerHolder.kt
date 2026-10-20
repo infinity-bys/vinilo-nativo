@@ -197,14 +197,14 @@ class PlayerHolder(private val context: Context) {
 
     /** 0 = repetir todas, 1 = repetir una, 2 = aleatorio */
     fun applyMode(m: Int) {
-        store.setMode(m)
+        store.changeMode(m)
         val c = controller ?: return
         c.shuffleModeEnabled = (m == 2)
         c.repeatMode = if (m == 1) Player.REPEAT_MODE_ONE else Player.REPEAT_MODE_ALL
     }
 
     fun applySpeed(v: Float) {
-        store.setSpeed(v)
+        store.changeSpeed(v)
         controller?.setPlaybackSpeed(v)
     }
 

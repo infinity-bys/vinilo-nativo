@@ -72,12 +72,12 @@ class Store private constructor(context: Context) {
     fun isHidden(s: Song): Boolean =
         s.id in hidden || (autoHide && s.junk.isNotEmpty() && s.id !in forced)
 
-    fun setAutoHide(v: Boolean) {
+    fun changeAutoHide(v: Boolean) {
         autoHide = v
         sp.edit().putBoolean("auto", v).apply()
     }
 
-    fun setAccentOn(v: Boolean) {
+    fun changeAccentOn(v: Boolean) {
         accentOn = v
         sp.edit().putBoolean("acc", v).apply()
     }
@@ -102,17 +102,17 @@ class Store private constructor(context: Context) {
     }
 
     // ---------- Modo, velocidad, ecualizador ----------
-    fun setMode(m: Int) {
+    fun changeMode(m: Int) {
         mode = m
         sp.edit().putInt("mode", m).apply()
     }
 
-    fun setSpeed(v: Float) {
+    fun changeSpeed(v: Float) {
         speed = v
         sp.edit().putFloat("speed", v).apply()
     }
 
-    fun setEq(g: List<Int>) {
+    fun changeEq(g: List<Int>) {
         eq = g
         sp.edit().putString("eq", g.joinToString(",")).apply()
     }

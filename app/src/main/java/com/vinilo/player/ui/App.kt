@@ -355,7 +355,7 @@ fun VinyloApp(holder: PlayerHolder) {
                 is Sheet.Sort -> SortSheet(store, close)
 
                 is Sheet.Eq -> EqSheet(store) { g ->
-                    store.setEq(g)
+                    store.changeEq(g)
                     Fx.apply(g)
                 }
 
