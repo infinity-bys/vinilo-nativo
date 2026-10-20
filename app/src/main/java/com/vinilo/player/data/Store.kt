@@ -117,12 +117,6 @@ class Store private constructor(context: Context) {
         sp.edit().putString("eq", g.joinToString(",")).apply()
     }
 
-    // ---------- Permiso del visualizador ----------
-    fun micAsked(): Boolean = sp.getBoolean("micAsked", false)
-    fun markMicAsked() {
-        sp.edit().putBoolean("micAsked", true).apply()
-    }
-
     // ---------- Ultima cancion ----------
     fun lastId(): Long = sp.getLong("lastId", -1L)
     fun lastPos(): Long = sp.getLong("lastPos", 0L)

@@ -149,19 +149,25 @@ private fun simBar(i: Int, t: Float): Float {
 }
 
 @Composable
-fun Bars(playing: Boolean, top: Color, bottom: Color, modifier: Modifier = Modifier) {
+fun Bars(
+    playing: Boolean,
+    top: Color,
+    bottom: Color,
+    position: () -> Long,
+    modifier: Modifier = Modifier
+) {
     val n = Spectrum.N
     val cur = remember { FloatArray(n) }
+    val lv = remember { FloatArray(n) }
     var frame by remember { mutableIntStateOf(0) }
     LaunchedEffect(playing) {
         if (playing) {
             while (true) {
                 withFrameNanos { ns ->
                     val t = ns / 1_000_000_000f
-                    val live = Spectrum.isLive()
-                    val src = Spectrum.bands
+                    val live = Spectrum.fill(position(), lv)
                     for (i in 0 until n) {
-                        val target = if (live) src[i] else simBar(i, t)
+                        val target = if (live) lv[i] else simBar(i, t)
                         // sube rapido y baja suave, como un ecualizador real
                         cur[i] = if (target > cur[i]) cur[i] + (target - cur[i]) * 0.6f else cur[i] * 0.88f
                     }
@@ -388,7 +394,11 @@ fun PlayerScreen(
         Disc(discSize, holder.isPlaying, cover, look)
 
         Spacer(Modifier.height(14.dp))
-        Bars(holder.isPlaying, look.acc, look.acc2, Modifier.fillMaxWidth().height(42.dp))
+        Bars(
+            holder.isPlaying, look.acc, look.acc2,
+            { holder.livePosition() },
+            Modifier.fillMaxWidth().height(42.dp)
+        )
         Spacer(Modifier.height(10.dp))
 
         val title = if (holder.title.isNotEmpty()) holder.title else song?.title ?: "Elige una canción"

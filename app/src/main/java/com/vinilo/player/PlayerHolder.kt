@@ -126,6 +126,14 @@ class PlayerHolder(private val context: Context) {
                         }
                     }
 
+                    override fun onPositionDiscontinuity(
+                        oldPosition: Player.PositionInfo,
+                        newPosition: Player.PositionInfo,
+                        reason: Int
+                    ) {
+                        Spectrum.base = newPosition.positionMs
+                    }
+
                     override fun onMediaMetadataChanged(mediaMetadata: MediaMetadata) {
                         sync(c.currentMediaItem)
                     }
@@ -151,6 +159,7 @@ class PlayerHolder(private val context: Context) {
     fun playList(songs: List<Song>, index: Int) {
         val c = controller ?: return
         if (songs.isEmpty()) return
+        Spectrum.base = 0L
         c.setMediaItems(songs.map { it.toMediaItem() }, index.coerceIn(0, songs.size - 1), 0L)
         c.prepare()
         c.play()
@@ -167,6 +176,7 @@ class PlayerHolder(private val context: Context) {
         val idx = list.indexOfFirst { it.id == id }
         if (idx < 0) return
         val pos = store.lastPos()
+        Spectrum.base = if (pos > 0L) pos else 0L
         c.setMediaItems(list.map { it.toMediaItem() }, idx, if (pos > 0L) pos else 0L)
         c.prepare()
     }
@@ -188,6 +198,7 @@ class PlayerHolder(private val context: Context) {
     }
 
     fun seekTo(ms: Long) {
+        Spectrum.base = ms
         controller?.seekTo(ms)
         positionMs = ms
     }
