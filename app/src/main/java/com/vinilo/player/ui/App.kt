@@ -127,6 +127,7 @@ fun VinyloApp(holder: PlayerHolder) {
     var showPlayer by remember { mutableStateOf(false) }
     var sheet by remember { mutableStateOf<Sheet?>(null) }
     var confirmDel by remember { mutableStateOf<Playlist?>(null) }
+    var pickerFor by remember { mutableStateOf<String?>(null) }
 
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
         granted = hasAudioPermission(context)
@@ -158,7 +159,30 @@ fun VinyloApp(holder: PlayerHolder) {
     val byId = remember(allSongs) { allSongs.associateBy { it.id } }
     val visibleById = remember(visible) { visible.associateBy { it.id } }
 
-    val plSel = plSelId?.let { id -> store.playlists.firstOrNull { it.id == id } }
+    // Playlists automaticas: se arman solas con lo que escuchas y con los artistas
+    val autoLists = remember(visible, store.plays) {
+        val out = ArrayList<Playlist>()
+        val top = visible.filter { (store.plays[it.id] ?: 0) > 0 }
+            .sortedByDescending { store.plays[it.id] ?: 0 }
+            .take(50)
+        if (top.isNotEmpty()) out.add(Playlist("auto:plays", "Más escuchadas", top.map { it.id }))
+        val recent = visible.sortedByDescending { it.added }.take(50)
+        if (recent.isNotEmpty()) out.add(Playlist("auto:recent", "Recién agregadas", recent.map { it.id }))
+        val artists = visible.filter { it.artist.isNotBlank() }
+            .groupBy { it.artist.trim() }
+            .toList()
+            .filter { it.second.size >= 3 }
+            .sortedWith(compareBy<Pair<String, List<Song>>>({ -it.second.size }, { it.first.lowercase() }))
+            .take(20)
+        for ((name, list) in artists) {
+            out.add(Playlist("auto:artist:" + name, name, list.sortedBy { it.title.lowercase() }.map { it.id }))
+        }
+        out
+    }
+
+    val plSel = plSelId?.let { id ->
+        store.playlists.firstOrNull { it.id == id } ?: autoLists.firstOrNull { it.id == id }
+    }
     val q = query.trim().lowercase()
     val shown = remember(visible, visibleById, plSel, filter, q, store.favs) {
         val base = if (plSel != null) plSel.ids.mapNotNull { visibleById[it] } else visible
@@ -250,6 +274,7 @@ fun VinyloApp(holder: PlayerHolder) {
                 onOpenPlaylist = { p -> plSelId = p.id },
                 shown = shown,
                 byId = byId,
+                autoLists = autoLists,
                 sel = sel,
                 onRowClick = { s, i ->
                     val cur = sel
@@ -264,18 +289,19 @@ fun VinyloApp(holder: PlayerHolder) {
                 onSort = { sheet = Sheet.Sort },
                 onSettings = { sheet = Sheet.Settings },
                 onNewList = {
-                    sheet = Sheet.Name("Nueva lista", "", "Crear lista") { name ->
+                    sheet = Sheet.Name("Nueva playlist", "", "Crear playlist") { name ->
                         store.createPlaylist(name, emptyList())
                         sheet = null
                     }
                 },
                 onRename = { p ->
-                    sheet = Sheet.Name("Renombrar lista", p.name, "Guardar") { name ->
+                    sheet = Sheet.Name("Renombrar playlist", p.name, "Guardar") { name ->
                         store.renamePlaylist(p.id, name)
                         sheet = null
                     }
                 },
                 onDelete = { p -> confirmDel = p },
+                onAddSongs = { p -> pickerFor = p.id },
                 onSelClose = { sel = null },
                 onSelAll = { sel = shown.map { it.id }.toSet() },
                 onGrant = { launcher.launch(permissionsToAsk()) },
@@ -284,7 +310,7 @@ fun VinyloApp(holder: PlayerHolder) {
 
             if (sel != null) {
                 SelActions(
-                    inPlaylist = plSel != null,
+                    inPlaylist = plSel != null && !plSel.id.startsWith("auto:"),
                     onAdd = { sheet = Sheet.AddTo(selectedIds()) },
                     onHide = {
                         val ids = selectedIds()
@@ -295,7 +321,7 @@ fun VinyloApp(holder: PlayerHolder) {
                         val p = plSel
                         if (p != null) {
                             store.removeFromPlaylist(p.id, selectedIds().toSet())
-                            toast("Quitada de la lista")
+                            toast("Quitada de la playlist")
                         }
                         sel = null
                     }
@@ -327,6 +353,20 @@ fun VinyloApp(holder: PlayerHolder) {
                     val m = (store.mode + 1) % 3
                     holder.applyMode(m)
                     toast(modeLabels[m])
+                }
+            )
+        }
+        // ---------- Elegir canciones para una playlist ----------
+        val pk = pickerFor?.let { id -> store.playlists.firstOrNull { it.id == id } }
+        if (pk != null) {
+            SongPicker(
+                playlist = pk,
+                songs = visible,
+                onClose = { pickerFor = null },
+                onDone = { ids ->
+                    val n = store.addToPlaylist(pk.id, ids)
+                    toast(if (n == 1) "1 canción agregada" else n.toString() + " canciones agregadas")
+                    pickerFor = null
                 }
             )
         }
@@ -375,7 +415,7 @@ fun VinyloApp(holder: PlayerHolder) {
                         playlists = store.playlists,
                         byId = byId,
                         onNew = {
-                            sheet = Sheet.Name("Nueva lista", "", "Crear lista") { name ->
+                            sheet = Sheet.Name("Nueva playlist", "", "Crear playlist") { name ->
                                 val p = store.createPlaylist(name, s.ids)
                                 toast("Agregada a «" + p.name + "»")
                                 sel = null
@@ -402,7 +442,7 @@ fun VinyloApp(holder: PlayerHolder) {
         AlertDialog(
             onDismissRequest = { confirmDel = null },
             containerColor = C.Panel,
-            title = { Text("¿Eliminar la lista?", color = C.Text) },
+            title = { Text("¿Eliminar la playlist?", color = C.Text) },
             text = { Text("«" + del.name + "» se eliminará. Las canciones no se borran.", color = C.Mute) },
             confirmButton = {
                 Text(

@@ -477,6 +477,7 @@ fun PlayerScreen(
 
         Spacer(Modifier.height(6.dp))
         SeekRow(holder, look)
+        Spacer(Modifier.height(18.dp))
 
         // Controles principales
         Row(

@@ -45,7 +45,7 @@ import com.vinilo.player.data.Playlist
 import com.vinilo.player.data.Song
 
 @Composable
-private fun SearchBox(query: String, onQuery: (String) -> Unit) {
+fun SearchBox(query: String, onQuery: (String) -> Unit) {
     val shape = RoundedCornerShape(14.dp)
     Row(
         Modifier
@@ -85,7 +85,7 @@ private fun SearchBox(query: String, onQuery: (String) -> Unit) {
 }
 
 @Composable
-private fun Radio(on: Boolean) {
+fun Radio(on: Boolean) {
     Box(
         Modifier
             .size(26.dp)
@@ -153,6 +153,17 @@ private fun SongRow(
 }
 
 @Composable
+private fun SectionLabel(text: String) {
+    Text(
+        text,
+        color = C.Mute,
+        fontSize = 13.sp,
+        fontWeight = FontWeight.Bold,
+        modifier = Modifier.padding(start = 4.dp, top = 12.dp, bottom = 2.dp)
+    )
+}
+
+@Composable
 private fun PlaylistRow(p: Playlist, byId: Map<Long, Song>, onClick: () -> Unit) {
     val shape = RoundedCornerShape(16.dp)
     val count = p.ids.count { byId.containsKey(it) }
@@ -189,6 +200,7 @@ fun HomeScreen(
     onOpenPlaylist: (Playlist) -> Unit,
     shown: List<Song>,
     byId: Map<Long, Song>,
+    autoLists: List<Playlist>,
     sel: Set<Long>?,
     onRowClick: (Song, Int) -> Unit,
     onRowLong: (Song) -> Unit,
@@ -197,6 +209,7 @@ fun HomeScreen(
     onNewList: () -> Unit,
     onRename: (Playlist) -> Unit,
     onDelete: (Playlist) -> Unit,
+    onAddSongs: (Playlist) -> Unit,
     onSelClose: () -> Unit,
     onSelAll: () -> Unit,
     onGrant: () -> Unit,
@@ -265,7 +278,7 @@ fun HomeScreen(
             ) {
                 Chip("Todas", filter == 0, { onFilter(0) })
                 Chip("Favoritas", filter == 1, { onFilter(1) }, icon = R.drawable.ic_heart_outline)
-                Chip("Listas", filter == 2, { onFilter(2) })
+                Chip("Playlists", filter == 2, { onFilter(2) })
             }
         }
 
@@ -273,7 +286,7 @@ fun HomeScreen(
         val countText = when {
             !granted || !scanned -> ""
             plSel != null -> plural(shown.size, "canción", "canciones")
-            filter == 2 -> plural(store.playlists.size, "lista", "listas")
+            filter == 2 -> plural(store.playlists.size + autoLists.size, "playlist", "playlists")
             filter == 1 -> plural(shown.size, "favorita", "favoritas")
             searching -> "${shown.size} de $totalVisible canciones"
             else -> plural(totalVisible, "canción", "canciones")
@@ -334,18 +347,25 @@ fun HomeScreen(
                                 .padding(13.dp),
                             contentAlignment = Alignment.Center
                         ) {
-                            Text("＋ Nueva lista", color = C.Acc, fontWeight = FontWeight.Bold)
+                            Text("＋ Nueva playlist", color = C.Acc, fontWeight = FontWeight.Bold)
                         }
                     }
                     if (store.playlists.isEmpty()) {
                         item {
                             EmptyCard(
-                                "Aún no tienes listas",
-                                "Crea una con «＋ Nueva lista», o mantén presionada una canción y toca «Agregar a»."
+                                "Aún no tienes playlists",
+                                "Crea una con «＋ Nueva playlist» y agrégale las canciones que quieras."
                             )
                         }
                     } else {
+                        item { SectionLabel("Tus playlists") }
                         itemsIndexed(store.playlists, key = { _, p -> p.id }) { _, p ->
+                            PlaylistRow(p, byId) { onOpenPlaylist(p) }
+                        }
+                    }
+                    if (autoLists.isNotEmpty()) {
+                        item { SectionLabel("Automáticas · según lo que escuchas") }
+                        itemsIndexed(autoLists, key = { _, p -> p.id }) { _, p ->
                             PlaylistRow(p, byId) { onOpenPlaylist(p) }
                         }
                     }
@@ -360,7 +380,7 @@ fun HomeScreen(
                             .padding(horizontal = 12.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        IconBtn(R.drawable.ic_chevron_left, "Volver a las listas", onPlBack)
+                        IconBtn(R.drawable.ic_chevron_left, "Volver a las playlists", onPlBack)
                         Text(
                             plSel.name,
                             color = C.Text,
@@ -371,8 +391,11 @@ fun HomeScreen(
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.weight(1f)
                         )
-                        IconBtn(R.drawable.ic_edit, "Renombrar", { onRename(plSel) }, tint = C.Mute)
-                        IconBtn(R.drawable.ic_delete, "Eliminar lista", { onDelete(plSel) }, tint = C.Mute)
+                        if (!plSel.id.startsWith("auto:")) {
+                            IconBtn(R.drawable.ic_add, "Agregar canciones", { onAddSongs(plSel) }, tint = C.Acc)
+                            IconBtn(R.drawable.ic_edit, "Renombrar", { onRename(plSel) }, tint = C.Mute)
+                            IconBtn(R.drawable.ic_delete, "Eliminar playlist", { onDelete(plSel) }, tint = C.Mute)
+                        }
                     }
                 }
                 LazyColumn(
@@ -392,8 +415,8 @@ fun HomeScreen(
                                     textAlign = TextAlign.Center
                                 )
                                 plSel != null -> EmptyCard(
-                                    "Esta lista está vacía",
-                                    "Mantén presionada una canción y toca «Agregar a»."
+                                    "Esta playlist está vacía",
+                                    "Toca el ＋ de arriba para agregar canciones."
                                 )
                                 filter == 1 -> EmptyCard(
                                     "Aún no tienes favoritas",

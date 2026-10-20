@@ -489,7 +489,7 @@ fun PlayerMenuSheet(
                 )
             }
         }
-        SheetRow("Agregar a una lista", onAdd, icon = R.drawable.ic_playlist_add)
+        SheetRow("Agregar a una playlist", onAdd, icon = R.drawable.ic_playlist_add)
         SheetRow(
             "Velocidad",
             { page = "speed" },
@@ -510,7 +510,7 @@ fun AddToSheet(
     onNew: () -> Unit,
     onPick: (Playlist) -> Unit
 ) {
-    SheetTitle("Agregar a la lista")
+    SheetTitle("Agregar a una playlist")
     Row(
         Modifier
             .fillMaxWidth()
@@ -529,7 +529,7 @@ fun AddToSheet(
             Icon(painterResource(R.drawable.ic_add), null, tint = C.Acc, modifier = Modifier.size(24.dp))
         }
         Spacer(Modifier.width(14.dp))
-        Text("Nueva lista", color = C.Acc, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+        Text("Nueva playlist", color = C.Acc, fontWeight = FontWeight.Bold, fontSize = 16.sp)
     }
     for (p in playlists) {
         val count = p.ids.count { byId.containsKey(it) }
