@@ -19,13 +19,20 @@ import kotlin.math.ln
  */
 object Fx {
     private var eq: Equalizer? = null
+
+    /** Id de sesion de audio del reproductor (lo usa el visualizador). */
+    @Volatile
+    var sessionId: Int = 0
+        private set
+
     private val freqs = intArrayOf(60, 230, 910, 3600, 14000)
 
-    fun attach(sessionId: Int, gains: List<Int>) {
+    fun attach(session: Int, gains: List<Int>) {
         release()
-        if (sessionId == 0) return
+        sessionId = session
+        if (session == 0) return
         try {
-            val e = Equalizer(0, sessionId)
+            val e = Equalizer(0, session)
             e.setEnabled(true)
             eq = e
             apply(gains)

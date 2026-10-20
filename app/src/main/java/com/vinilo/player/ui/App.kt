@@ -30,6 +30,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -50,6 +51,7 @@ import androidx.core.content.ContextCompat
 import com.vinilo.player.Fx
 import com.vinilo.player.PlayerHolder
 import com.vinilo.player.R
+import com.vinilo.player.Spectrum
 import com.vinilo.player.data.CoverCache
 import com.vinilo.player.data.Library
 import com.vinilo.player.data.Playlist
@@ -143,6 +145,29 @@ fun VinyloApp(holder: PlayerHolder) {
             allSongs = withContext(Dispatchers.IO) { Library.scan(context) }
             scanned = true
         }
+    }
+
+    // ---------- Visualizador real (barras al ritmo de la musica) ----------
+    var micGranted by remember {
+        mutableStateOf(
+            ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
+                PackageManager.PERMISSION_GRANTED
+        )
+    }
+    val micLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { ok ->
+        micGranted = ok
+    }
+    // se pide una sola vez, la primera vez que abres el reproductor
+    LaunchedEffect(showPlayer) {
+        if (showPlayer && !micGranted && !store.micAsked()) {
+            store.markMicAsked()
+            micLauncher.launch(Manifest.permission.RECORD_AUDIO)
+        }
+    }
+    val vizOn = showPlayer && micGranted && holder.currentId != -1L
+    DisposableEffect(vizOn) {
+        if (vizOn) Spectrum.start(Fx.sessionId)
+        onDispose { Spectrum.stop() }
     }
 
     // ---------- Listas derivadas ----------
@@ -341,6 +366,10 @@ fun VinyloApp(holder: PlayerHolder) {
                     store = store,
                     holder = holder,
                     hidden = hiddenSongs,
+                    micOn = micGranted,
+                    onMic = {
+                        if (!micGranted) micLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                    },
                     onRescan = {
                         holder.resumeTick++
                         toast("Buscando música…")

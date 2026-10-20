@@ -153,6 +153,8 @@ fun SettingsSheet(
     store: Store,
     holder: PlayerHolder,
     hidden: List<Song>,
+    micOn: Boolean,
+    onMic: () -> Unit,
     onRescan: () -> Unit,
     onUnhide: (List<Song>) -> Unit,
     toast: (String) -> Unit
@@ -241,6 +243,12 @@ fun SettingsSheet(
                 { store.changeAccentOn(!store.accentOn) },
                 icon = R.drawable.ic_palette,
                 trailing = { Sw(store.accentOn) }
+            )
+            SheetRow(
+                "Barras al ritmo de la música",
+                onMic,
+                icon = R.drawable.ic_equalizer,
+                value = if (micOn) "Activas" else "Dar permiso"
             )
             SheetRow(
                 "Ocultar audios que no son música",

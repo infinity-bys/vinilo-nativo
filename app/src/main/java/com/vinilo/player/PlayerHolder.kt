@@ -94,7 +94,7 @@ class PlayerHolder(private val context: Context) {
                     }
                 }
             }
-            handler.postDelayed(this, 300L)
+            handler.postDelayed(this, 100L)
         }
     }
 
@@ -170,6 +170,9 @@ class PlayerHolder(private val context: Context) {
         c.setMediaItems(list.map { it.toMediaItem() }, idx, if (pos > 0L) pos else 0L)
         c.prepare()
     }
+
+    /** Posicion exacta en este instante (para animar la barra de tiempo fluida). */
+    fun livePosition(): Long = controller?.currentPosition?.coerceAtLeast(0L) ?: positionMs
 
     fun toggle() {
         val c = controller ?: return

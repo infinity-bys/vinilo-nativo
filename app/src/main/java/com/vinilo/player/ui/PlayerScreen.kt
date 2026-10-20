@@ -11,6 +11,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -37,6 +39,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -52,6 +57,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontFamily
@@ -64,6 +71,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.runtime.withFrameNanos
 import com.vinilo.player.PlayerHolder
 import com.vinilo.player.R
+import com.vinilo.player.Spectrum
 import com.vinilo.player.data.Song
 import kotlin.math.max
 import kotlin.math.min
@@ -131,37 +139,53 @@ fun Disc(diameter: Dp, playing: Boolean, cover: ImageBitmap?, look: Look) {
 }
 
 // ---------------------------------------------------------------------------
-// Barras animadas (visualizador)
+// Barras al ritmo de la musica (audio real; si no hay permiso, animacion de respaldo)
 // ---------------------------------------------------------------------------
+private fun simBar(i: Int, t: Float): Float {
+    val a = sin(t * (2.1f + (i % 7) * 0.45f) + i * 1.3f) * 0.5f + 0.5f
+    val b = sin(t * 0.9f + i * 0.35f) * 0.5f + 0.5f
+    val env = 1f - (i.toFloat() / Spectrum.N) * 0.55f
+    return (0.2f + 0.8f * a * (0.4f + 0.6f * b)) * env
+}
+
 @Composable
 fun Bars(playing: Boolean, top: Color, bottom: Color, modifier: Modifier = Modifier) {
-    var t by remember { mutableFloatStateOf(0f) }
-    var level by remember { mutableFloatStateOf(0f) }
+    val n = Spectrum.N
+    val cur = remember { FloatArray(n) }
+    var frame by remember { mutableIntStateOf(0) }
     LaunchedEffect(playing) {
         if (playing) {
             while (true) {
-                withFrameNanos { n ->
-                    t = n / 1_000_000_000f
-                    level = min(1f, level + 0.05f)
+                withFrameNanos { ns ->
+                    val t = ns / 1_000_000_000f
+                    val live = Spectrum.isLive()
+                    val src = Spectrum.bands
+                    for (i in 0 until n) {
+                        val target = if (live) src[i] else simBar(i, t)
+                        // sube rapido y baja suave, como un ecualizador real
+                        cur[i] = if (target > cur[i]) cur[i] + (target - cur[i]) * 0.6f else cur[i] * 0.88f
+                    }
+                    frame++
                 }
             }
         } else {
-            while (level > 0f) {
-                withFrameNanos { level = max(0f, level - 0.06f) }
+            while (cur.any { it > 0.01f }) {
+                withFrameNanos {
+                    for (i in 0 until n) cur[i] = cur[i] * 0.86f
+                    frame++
+                }
             }
+            for (i in 0 until n) cur[i] = 0f
+            frame++
         }
     }
     Canvas(modifier) {
-        val n = 28
+        if (frame < 0) return@Canvas
         val g = size.width / n
         val bw = g * 0.62f
         val brush = Brush.verticalGradient(listOf(top, bottom))
         for (i in 0 until n) {
-            val a = sin(t * (2.1f + (i % 7) * 0.45f) + i * 1.3f) * 0.5f + 0.5f
-            val b = sin(t * 0.9f + i * 0.35f) * 0.5f + 0.5f
-            val env = 1f - (i.toFloat() / n) * 0.55f
-            val amp = (0.2f + 0.8f * a * (0.4f + 0.6f * b)) * env
-            val h = max(3.dp.toPx(), amp * level * size.height)
+            val h = max(3.dp.toPx(), cur[i] * size.height)
             drawRoundRect(
                 brush = brush,
                 topLeft = Offset(i * g + (g - bw) / 2f, size.height - h),
@@ -173,37 +197,103 @@ fun Bars(playing: Boolean, top: Color, bottom: Color, modifier: Modifier = Modif
 }
 
 // ---------------------------------------------------------------------------
-// Barra de progreso
+// Barra de progreso: linea fina con un puntico que se desliza
 // ---------------------------------------------------------------------------
+@Composable
+private fun SeekBar(
+    frac: Float,
+    dragging: Boolean,
+    look: Look,
+    onDrag: (Float) -> Unit,
+    onDone: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var w by remember { mutableFloatStateOf(1f) }
+    val dragState = rememberUpdatedState(onDrag)
+    val doneState = rememberUpdatedState(onDone)
+    Box(
+        modifier
+            .height(36.dp)
+            .onSizeChanged { w = it.width.toFloat().coerceAtLeast(1f) }
+            .pointerInput(Unit) {
+                detectTapGestures { o ->
+                    dragState.value((o.x / w).coerceIn(0f, 1f))
+                    doneState.value()
+                }
+            }
+            .pointerInput(Unit) {
+                detectHorizontalDragGestures(
+                    onDragStart = { o -> dragState.value((o.x / w).coerceIn(0f, 1f)) },
+                    onDragEnd = { doneState.value() },
+                    onDragCancel = { doneState.value() },
+                    onHorizontalDrag = { change, _ ->
+                        change.consume()
+                        dragState.value((change.position.x / w).coerceIn(0f, 1f))
+                    }
+                )
+            }
+    ) {
+        Canvas(Modifier.fillMaxSize()) {
+            val th = 4.dp.toPx()
+            val cy = size.height / 2f
+            val x = size.width * frac
+            drawRoundRect(
+                color = C.Line,
+                topLeft = Offset(0f, cy - th / 2f),
+                size = Size(size.width, th),
+                cornerRadius = CornerRadius(th / 2f, th / 2f)
+            )
+            drawRoundRect(
+                brush = Brush.horizontalGradient(listOf(look.acc, look.acc2), startX = 0f, endX = max(size.width, 1f)),
+                topLeft = Offset(0f, cy - th / 2f),
+                size = Size(x, th),
+                cornerRadius = CornerRadius(th / 2f, th / 2f)
+            )
+            if (dragging) {
+                drawCircle(look.acc.copy(alpha = 0.25f), radius = 14.dp.toPx(), center = Offset(x, cy))
+            }
+            drawCircle(look.soft, radius = (if (dragging) 8.dp else 6.dp).toPx(), center = Offset(x, cy))
+        }
+    }
+}
+
 @Composable
 private fun SeekRow(holder: PlayerHolder, look: Look) {
     var dragging by remember { mutableStateOf(false) }
     var dragV by remember { mutableFloatStateOf(0f) }
+    var live by remember { mutableLongStateOf(holder.positionMs) }
+    // mientras suena, la posicion se lee en cada fotograma: el puntico se mueve fluido
+    LaunchedEffect(holder.isPlaying) {
+        while (holder.isPlaying) {
+            withFrameNanos { }
+            live = holder.livePosition()
+        }
+    }
     val dur = holder.durationMs
-    val frac = if (dur > 0L) (holder.positionMs.toFloat() / dur).coerceIn(0f, 1f) else 0f
+    val pos = if (holder.isPlaying) live else holder.positionMs
+    val frac = if (dur > 0L) (pos.toFloat() / dur).coerceIn(0f, 1f) else 0f
     val shown = if (dragging) dragV else frac
-    val shownMs = if (dragging) (dragV * dur).toLong() else holder.positionMs
+    val shownMs = if (dragging) (dragV * dur).toLong() else pos
     Row(
         Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(fmtTime(shownMs), color = C.Mute, fontSize = 12.sp, modifier = Modifier.width(40.dp))
-        Slider(
-            value = shown,
-            onValueChange = {
+        SeekBar(
+            frac = shown,
+            dragging = dragging,
+            look = look,
+            onDrag = { v ->
                 dragging = true
-                dragV = it
+                dragV = v
             },
-            onValueChangeFinished = {
+            onDone = {
                 holder.seekTo((dragV * dur).toLong())
                 dragging = false
             },
-            modifier = Modifier.weight(1f),
-            colors = SliderDefaults.colors(
-                thumbColor = C.Text,
-                activeTrackColor = look.acc,
-                inactiveTrackColor = C.Line
-            )
+            modifier = Modifier
+                .weight(1f)
+                .padding(horizontal = 8.dp)
         )
         Text(
             fmtTime(dur),
@@ -346,7 +436,7 @@ fun PlayerScreen(
             IconBtn(R.drawable.ic_prev, "Anterior", { holder.prev() }, tint = look.soft, size = 52.dp, iconSize = 28.dp)
             Box(
                 Modifier
-                    .size(68.dp)
+                    .size(64.dp)
                     .shadow(10.dp, CircleShape, ambientColor = look.acc2, spotColor = look.acc2)
                     .clip(CircleShape)
                     .background(Brush.linearGradient(listOf(look.acc, look.acc2)))
@@ -354,10 +444,10 @@ fun PlayerScreen(
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
-                    painterResource(if (holder.isPlaying) R.drawable.ic_pause else R.drawable.ic_play),
+                    painterResource(if (holder.isPlaying) R.drawable.ic_pause_wide else R.drawable.ic_play),
                     if (holder.isPlaying) "Pausar" else "Reproducir",
                     tint = C.Bg,
-                    modifier = Modifier.size(30.dp)
+                    modifier = Modifier.size(34.dp)
                 )
             }
             IconBtn(R.drawable.ic_next, "Siguiente", { holder.next() }, tint = look.soft, size = 52.dp, iconSize = 28.dp)
@@ -488,7 +578,7 @@ fun MiniPlayer(holder: PlayerHolder, song: Song?, look: Look, onOpen: () -> Unit
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
-                    painterResource(if (playing) R.drawable.ic_pause else R.drawable.ic_play),
+                    painterResource(if (playing) R.drawable.ic_pause_wide else R.drawable.ic_play),
                     null, tint = C.Bg, modifier = Modifier.size(22.dp)
                 )
             }
