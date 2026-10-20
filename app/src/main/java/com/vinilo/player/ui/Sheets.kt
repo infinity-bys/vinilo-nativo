@@ -1,5 +1,20 @@
 package com.vinilo.player.ui
 
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.union
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -68,29 +83,87 @@ import kotlin.math.roundToInt
 // ---------------------------------------------------------------------------
 // Contenedor comun de todas las hojas inferiores
 // ---------------------------------------------------------------------------
-@OptIn(ExperimentalMaterial3Api::class)
+/**
+ * Hoja inferior que vive DENTRO de la pantalla (no abre una ventana nueva del sistema),
+ * asi que aparece al instante y el disco no se entrecorta. Se cierra tocando fuera,
+ * arrastrando hacia abajo o con el boton atras.
+ */
 @Composable
 fun VSheet(onClose: () -> Unit, content: @Composable (close: () -> Unit) -> Unit) {
-    val state = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val progress = remember { Animatable(0f) }
     val scope = rememberCoroutineScope()
-    val close: () -> Unit = {
-        scope.launch { state.hide() }.invokeOnCompletion { onClose() }
+    var closing by remember { mutableStateOf(false) }
+    var dragY by remember { mutableFloatStateOf(0f) }
+
+    LaunchedEffect(Unit) {
+        progress.animateTo(1f, tween(200))
     }
-    ModalBottomSheet(
-        onDismissRequest = onClose,
-        sheetState = state,
-        containerColor = C.Panel,
-        contentColor = C.Text,
-        shape = RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp)
-    ) {
+    val close: () -> Unit = {
+        if (!closing) {
+            closing = true
+            scope.launch {
+                progress.animateTo(0f, tween(160))
+                onClose()
+            }
+        }
+    }
+    BackHandler { close() }
+
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val maxH = maxHeight * 0.9f
+        // fondo oscuro: tocarlo cierra la hoja
+        Box(
+            Modifier
+                .fillMaxSize()
+                .graphicsLayer { alpha = progress.value }
+                .background(Color(0xAA000000))
+                .pointerInput(Unit) { detectTapGestures { close() } }
+        )
         Column(
             Modifier
+                .align(Alignment.BottomCenter)
                 .fillMaxWidth()
-                .imePadding()
-                .verticalScroll(rememberScrollState())
-                .padding(start = 16.dp, end = 16.dp, bottom = 24.dp)
+                .graphicsLayer { translationY = (1f - progress.value) * size.height + dragY }
+                .clip(RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp))
+                .background(C.Panel)
+                .pointerInput(Unit) { detectTapGestures { } }
         ) {
-            content(close)
+            // asa: se arrastra hacia abajo para cerrar
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(28.dp)
+                    .pointerInput(Unit) {
+                        detectVerticalDragGestures(
+                            onDragEnd = {
+                                if (dragY > 120f) close() else dragY = 0f
+                            },
+                            onDragCancel = { dragY = 0f }
+                        ) { change, amount ->
+                            change.consume()
+                            dragY = (dragY + amount).coerceAtLeast(0f)
+                        }
+                    },
+                contentAlignment = Alignment.Center
+            ) {
+                Box(
+                    Modifier
+                        .width(36.dp)
+                        .height(4.dp)
+                        .clip(RoundedCornerShape(2.dp))
+                        .background(C.Mute.copy(alpha = 0.5f))
+                )
+            }
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = maxH - 28.dp)
+                    .windowInsetsPadding(WindowInsets.navigationBars.union(WindowInsets.ime))
+                    .verticalScroll(rememberScrollState())
+                    .padding(start = 16.dp, end = 16.dp, bottom = 24.dp)
+            ) {
+                content(close)
+            }
         }
     }
 }

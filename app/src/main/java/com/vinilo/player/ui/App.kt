@@ -330,69 +330,68 @@ fun VinyloApp(holder: PlayerHolder) {
                 }
             )
         }
-    }
+        // ---------- Hojas inferiores ----------
+        val s = sheet
+        if (s != null) {
+            VSheet(onClose = { sheet = null }) { close ->
+                when (s) {
+                    is Sheet.Settings -> SettingsSheet(
+                        store = store,
+                        holder = holder,
+                        hidden = hiddenSongs,
+                        onRescan = {
+                            holder.resumeTick++
+                            toast("Buscando música…")
+                        },
+                        onUnhide = { list ->
+                            store.unhide(list)
+                            toast(if (list.size == 1) "Canción visible" else "Canciones visibles")
+                        },
+                        toast = { m -> toast(m) }
+                    )
 
-    // ---------- Hojas inferiores ----------
-    val s = sheet
-    if (s != null) {
-        VSheet(onClose = { sheet = null }) { close ->
-            when (s) {
-                is Sheet.Settings -> SettingsSheet(
-                    store = store,
-                    holder = holder,
-                    hidden = hiddenSongs,
-                    onRescan = {
-                        holder.resumeTick++
-                        toast("Buscando música…")
-                    },
-                    onUnhide = { list ->
-                        store.unhide(list)
-                        toast(if (list.size == 1) "Canción visible" else "Canciones visibles")
-                    },
-                    toast = { m -> toast(m) }
-                )
+                    is Sheet.Sort -> SortSheet(store, close)
 
-                is Sheet.Sort -> SortSheet(store, close)
-
-                is Sheet.Eq -> EqSheet(store) { g ->
-                    store.changeEq(g)
-                    Fx.apply(g)
-                }
-
-                is Sheet.PlayerMenu -> PlayerMenuSheet(
-                    song = current,
-                    store = store,
-                    onAdd = {
-                        if (holder.currentId != -1L) sheet = Sheet.AddTo(listOf(holder.currentId))
-                    },
-                    onSpeed = { v -> holder.applySpeed(v) },
-                    onHide = {
-                        hideSongs(listOf(holder.currentId))
-                        sheet = null
-                    },
-                    close = close
-                )
-
-                is Sheet.AddTo -> AddToSheet(
-                    playlists = store.playlists,
-                    byId = byId,
-                    onNew = {
-                        sheet = Sheet.Name("Nueva lista", "", "Crear lista") { name ->
-                            val p = store.createPlaylist(name, s.ids)
-                            toast("Agregada a «" + p.name + "»")
-                            sel = null
-                            sheet = null
-                        }
-                    },
-                    onPick = { p ->
-                        val n = store.addToPlaylist(p.id, s.ids)
-                        toast(if (n > 0) "Agregada a «" + p.name + "»" else "Ya estaba en «" + p.name + "»")
-                        sel = null
-                        close()
+                    is Sheet.Eq -> EqSheet(store) { g ->
+                        store.changeEq(g)
+                        Fx.apply(g)
                     }
-                )
 
-                is Sheet.Name -> NameSheet(s.title, s.initial, s.okText) { name -> s.onOk(name) }
+                    is Sheet.PlayerMenu -> PlayerMenuSheet(
+                        song = current,
+                        store = store,
+                        onAdd = {
+                            if (holder.currentId != -1L) sheet = Sheet.AddTo(listOf(holder.currentId))
+                        },
+                        onSpeed = { v -> holder.applySpeed(v) },
+                        onHide = {
+                            hideSongs(listOf(holder.currentId))
+                            sheet = null
+                        },
+                        close = close
+                    )
+
+                    is Sheet.AddTo -> AddToSheet(
+                        playlists = store.playlists,
+                        byId = byId,
+                        onNew = {
+                            sheet = Sheet.Name("Nueva lista", "", "Crear lista") { name ->
+                                val p = store.createPlaylist(name, s.ids)
+                                toast("Agregada a «" + p.name + "»")
+                                sel = null
+                                sheet = null
+                            }
+                        },
+                        onPick = { p ->
+                            val n = store.addToPlaylist(p.id, s.ids)
+                            toast(if (n > 0) "Agregada a «" + p.name + "»" else "Ya estaba en «" + p.name + "»")
+                            sel = null
+                            close()
+                        }
+                    )
+
+                    is Sheet.Name -> NameSheet(s.title, s.initial, s.okText) { name -> s.onOk(name) }
+                }
             }
         }
     }

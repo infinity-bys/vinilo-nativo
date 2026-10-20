@@ -107,7 +107,8 @@ private fun SongRow(
     isCurrent: Boolean,
     selMode: Boolean,
     selected: Boolean,
-    isFav: Boolean,
+    playing: Boolean,
+    position: () -> Long,
     onClick: () -> Unit,
     onLong: () -> Unit
 ) {
@@ -144,9 +145,9 @@ private fun SongRow(
                 overflow = TextOverflow.Ellipsis
             )
         }
-        if (isFav && !selMode) {
-            Icon(painterResource(R.drawable.ic_heart), null, tint = C.Acc2, modifier = Modifier.size(16.dp))
-            Spacer(Modifier.width(6.dp))
+        if (isCurrent && !selMode) {
+            Spacer(Modifier.width(8.dp))
+            NowBars(playing, C.Acc, position, Modifier.padding(end = 6.dp))
         }
     }
 }
@@ -411,7 +412,8 @@ fun HomeScreen(
                             isCurrent = s.id == holder.currentId,
                             selMode = sel != null,
                             selected = sel != null && s.id in sel,
-                            isFav = s.id in store.favs,
+                            playing = s.id == holder.currentId && holder.isPlaying,
+                            position = { holder.livePosition() },
                             onClick = { onRowClick(s, i) },
                             onLong = { onRowLong(s) }
                         )

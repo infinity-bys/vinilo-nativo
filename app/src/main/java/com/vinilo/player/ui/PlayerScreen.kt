@@ -185,11 +185,11 @@ fun Bars(
             frame++
         }
     }
+    val brush = remember(top, bottom) { Brush.verticalGradient(listOf(top, bottom)) }
     Canvas(modifier) {
         if (frame < 0) return@Canvas
         val g = size.width / n
         val bw = g * 0.62f
-        val brush = Brush.verticalGradient(listOf(top, bottom))
         for (i in 0 until n) {
             val h = max(3.dp.toPx(), cur[i] * size.height)
             drawRoundRect(
@@ -197,6 +197,52 @@ fun Bars(
                 topLeft = Offset(i * g + (g - bw) / 2f, size.height - h),
                 size = Size(bw, h),
                 cornerRadius = CornerRadius(bw / 2f, bw / 2f)
+            )
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Barritas chicas de "sonando ahora" (para la cancion actual en la lista)
+// ---------------------------------------------------------------------------
+@Composable
+fun NowBars(playing: Boolean, color: Color, position: () -> Long, modifier: Modifier = Modifier) {
+    val cur = remember { floatArrayOf(0.45f, 0.8f, 0.55f, 0.7f) }
+    val lv = remember { FloatArray(Spectrum.N) }
+    var frame by remember { mutableIntStateOf(0) }
+    LaunchedEffect(playing) {
+        if (playing) {
+            val starts = intArrayOf(1, 6, 13, 21)
+            while (true) {
+                withFrameNanos { ns ->
+                    val t = ns / 1_000_000_000f
+                    val live = Spectrum.fill(position(), lv)
+                    for (i in 0 until 4) {
+                        val target = if (live) {
+                            var m = 0f
+                            for (k in starts[i] until min(starts[i] + 4, Spectrum.N)) m = max(m, lv[k])
+                            m
+                        } else {
+                            0.25f + 0.75f * (sin(t * (3.1f + i * 1.1f) + i * 1.7f) * 0.5f + 0.5f)
+                        }
+                        cur[i] = if (target > cur[i]) cur[i] + (target - cur[i]) * 0.6f else max(0.12f, cur[i] * 0.88f)
+                    }
+                    frame++
+                }
+            }
+        }
+    }
+    Canvas(modifier.size(24.dp, 22.dp)) {
+        if (frame < 0) return@Canvas
+        val bw = 4.dp.toPx()
+        val gap = 2.5.dp.toPx()
+        for (i in 0 until 4) {
+            val h = max(3.dp.toPx(), cur[i] * size.height)
+            drawRoundRect(
+                color,
+                Offset(i * (bw + gap), size.height - h),
+                Size(bw, h),
+                CornerRadius(bw / 2f, bw / 2f)
             )
         }
     }
