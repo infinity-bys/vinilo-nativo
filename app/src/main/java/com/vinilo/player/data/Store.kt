@@ -53,7 +53,8 @@ class Store private constructor(context: Context) {
         private set
     var virt by mutableStateOf(sp.getInt("virt", 0))
         private set
-    var boost by mutableStateOf(sp.getInt("boost", 0))
+    /** Cuantas bandas se muestran en el ecualizador: 5 o 10 */
+    var eqBands by mutableStateOf(if (sp.getInt("eqBands", 10) == 5) 5 else 10)
         private set
 
     // ---------- Favoritos ----------
@@ -141,9 +142,9 @@ class Store private constructor(context: Context) {
         sp.edit().putInt("virt", virt).apply()
     }
 
-    fun changeBoost(v: Int) {
-        boost = v.coerceIn(0, 100)
-        sp.edit().putInt("boost", boost).apply()
+    fun changeEqBands(n: Int) {
+        eqBands = if (n == 5) 5 else 10
+        sp.edit().putInt("eqBands", eqBands).apply()
     }
 
     // ---------- Ultima cancion ----------

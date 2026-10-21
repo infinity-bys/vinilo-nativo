@@ -382,6 +382,7 @@ fun SortSheet(store: Store, close: () -> Unit) {
 // ---------------------------------------------------------------------------
 // Ecualizador: 5 bandas verticales, curva en vivo, presets y efectos
 // ---------------------------------------------------------------------------
+private val eqNames5 = listOf("31-63", "125-250", "500-1K", "2K-4K", "8K-16K")
 private val eqNames = listOf("31", "63", "125", "250", "500", "1K", "2K", "4K", "8K", "16K")
 private val eqPresets = listOf(
     "Normal" to listOf(0, 0, 0, 0, 0, 0, 0, 0, 0, 0),
@@ -396,6 +397,40 @@ private val eqPresets = listOf(
     "Clásica" to listOf(4, 3, 3, 2, -1, -1, 0, 2, 3, 4),
     "Acústica" to listOf(4, 4, 3, 1, 1, 1, 2, 3, 3, 2)
 )
+
+/** Selector "5 Bandas | 10 Bandas". */
+@Composable
+private fun BandsSwitch(bands: Int, onPick: (Int) -> Unit) {
+    val shape = RoundedCornerShape(14.dp)
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(C.Bg)
+            .border(1.dp, C.Line, shape)
+            .padding(4.dp)
+    ) {
+        for (n in listOf(5, 10)) {
+            val on = bands == n
+            Box(
+                Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(11.dp))
+                    .background(if (on) C.Acc else Color.Transparent)
+                    .clickable { onPick(n) }
+                    .padding(vertical = 10.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    "$n Bandas",
+                    color = if (on) C.Bg else C.Mute,
+                    fontWeight = if (on) FontWeight.Bold else FontWeight.Normal,
+                    fontSize = 14.sp
+                )
+            }
+        }
+    }
+}
 
 /** Dibujo suave de como queda el sonido con los ajustes actuales. */
 @Composable
@@ -651,19 +686,38 @@ fun EqSheet(store: Store) {
             Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            for (i in 0 until 10) {
-                EqBand(
-                    eqNames[i],
-                    store.eq[i],
-                    { v ->
-                        val g = store.eq.toMutableList()
-                        g[i] = v
-                        setGains(g)
-                    },
-                    Modifier.weight(1f)
-                )
+            if (store.eqBands == 10) {
+                for (i in 0 until 10) {
+                    EqBand(
+                        eqNames[i],
+                        store.eq[i],
+                        { v ->
+                            val g = store.eq.toMutableList()
+                            g[i] = v
+                            setGains(g)
+                        },
+                        Modifier.weight(1f)
+                    )
+                }
+            } else {
+                // 5 bandas: cada slider mueve dos bandas vecinas a la vez
+                for (j in 0 until 5) {
+                    EqBand(
+                        eqNames5[j],
+                        ((store.eq[2 * j] + store.eq[2 * j + 1]) / 2f).roundToInt(),
+                        { v ->
+                            val g = store.eq.toMutableList()
+                            g[2 * j] = v
+                            g[2 * j + 1] = v
+                            setGains(g)
+                        },
+                        Modifier.weight(1f)
+                    )
+                }
             }
         }
+        Spacer(Modifier.height(14.dp))
+        BandsSwitch(store.eqBands) { store.changeEqBands(it) }
     }
 
     // Efectos extra (solo los que tu telefono soporta)
@@ -687,13 +741,7 @@ fun EqSheet(store: Store) {
             Fx.update(store)
         }
     }
-    if (Fx.boostOk) {
-        FxRow("Volumen extra", store.boost, "Sube hasta +6 dB. Si suena distorsionado, bájalo.") { v ->
-            store.changeBoost(v)
-            Fx.update(store)
-        }
-    }
-    if (!Fx.bassOk && !Fx.virtOk && !Fx.boostOk) {
+    if (!Fx.bassOk && !Fx.virtOk) {
         Text(
             "Tu teléfono no ofrece más efectos.",
             color = C.Mute,
@@ -715,7 +763,6 @@ fun EqSheet(store: Store) {
                 store.changeEq(zeros)
                 store.changeBass(0)
                 store.changeVirt(0)
-                store.changeBoost(0)
                 Fx.update(store)
             }
             .padding(13.dp),

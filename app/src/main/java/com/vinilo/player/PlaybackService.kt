@@ -5,7 +5,6 @@ import android.content.Context
 import android.content.Intent
 import android.media.audiofx.BassBoost
 import android.media.audiofx.Equalizer
-import android.media.audiofx.LoudnessEnhancer
 import android.media.audiofx.Virtualizer
 import android.os.Handler
 import android.os.Looper
@@ -26,8 +25,8 @@ import kotlin.math.ln
 import kotlin.math.roundToInt
 
 /**
- * Efectos de sonido de Android sobre el reproductor: refuerzo de graves, sonido
- * envolvente y volumen extra. (El ecualizador de 10 bandas es EqProcessor.)
+ * Efectos de sonido de Android sobre el reproductor: refuerzo de graves y sonido
+ * envolvente. (El ecualizador de 10 bandas es EqProcessor.)
  *
  * Importante: los efectos NUNCA se encienden ni se apagan con la musica sonando
  * (eso hace un chasquido). "Apagar" = llevar el valor a cero poco a poco.
@@ -36,7 +35,6 @@ import kotlin.math.roundToInt
 object Fx {
     private var bassFx: BassBoost? = null
     private var virtFx: Virtualizer? = null
-    private var loudFx: LoudnessEnhancer? = null
 
     /** Cuales efectos existen en este telefono (la pantalla solo muestra los que si). */
     @Volatile
@@ -47,26 +45,22 @@ object Fx {
     var virtOk: Boolean = false
         private set
 
-    @Volatile
-    var boostOk: Boolean = false
-        private set
-
     /** Id de sesion de audio del reproductor. */
     @Volatile
     var sessionId: Int = 0
         private set
 
-    // 0 = graves (%), 1 = envolvente (%), 2 = volumen extra (%)
+    // 0 = graves (%), 1 = envolvente (%)
     private val handler = Handler(Looper.getMainLooper())
-    private val cur = FloatArray(3)
-    private val tgt = FloatArray(3)
-    private val applied = IntArray(3) { Int.MIN_VALUE }
+    private val cur = FloatArray(2)
+    private val tgt = FloatArray(2)
+    private val applied = IntArray(2) { Int.MIN_VALUE }
     private var running = false
 
     private val stepper = object : Runnable {
         override fun run() {
             var moving = false
-            for (i in 0 until 3) {
+            for (i in 0 until 2) {
                 val d = tgt[i] - cur[i]
                 if (abs(d) > 0.001f) {
                     cur[i] += d.coerceIn(-8f, 8f)
@@ -85,7 +79,6 @@ object Fx {
     private fun loadTargets(store: Store) {
         tgt[0] = store.bass.toFloat()
         tgt[1] = store.virt.toFloat()
-        tgt[2] = store.boost.toFloat()
     }
 
     fun attach(session: Int, store: Store) {
@@ -118,17 +111,9 @@ object Fx {
         } catch (t: Throwable) {
             virtFx = null
         }
-        try {
-            val l = LoudnessEnhancer(session)
-            l.setEnabled(true)
-            loudFx = l
-            boostOk = true
-        } catch (t: Throwable) {
-            loudFx = null
-        }
         // estado inicial: se aplica de golpe (todavia no suena nada)
         loadTargets(store)
-        for (i in 0 until 3) {
+        for (i in 0 until 2) {
             cur[i] = tgt[i]
             applied[i] = Int.MIN_VALUE
         }
@@ -162,15 +147,6 @@ object Fx {
             } catch (t: Throwable) {
             }
         }
-        // volumen extra: hasta +6 dB (600 milibelios)
-        val boost = (cur[2] * 6f).roundToInt().coerceIn(0, 600)
-        if (boost != applied[2]) {
-            applied[2] = boost
-            try {
-                loudFx?.setTargetGain(boost)
-            } catch (t: Throwable) {
-            }
-        }
     }
 
     fun release() {
@@ -184,16 +160,10 @@ object Fx {
             virtFx?.release()
         } catch (t: Throwable) {
         }
-        try {
-            loudFx?.release()
-        } catch (t: Throwable) {
-        }
         bassFx = null
         virtFx = null
-        loudFx = null
         bassOk = false
         virtOk = false
-        boostOk = false
     }
 }
 
