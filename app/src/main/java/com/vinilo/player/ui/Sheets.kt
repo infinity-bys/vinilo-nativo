@@ -592,12 +592,9 @@ private fun FxRow(label: String, pct: Int, hint: String? = null, onPct: (Int) ->
 fun EqSheet(store: Store) {
     fun setGains(g: List<Int>) {
         // mover cualquier cosa enciende el ecualizador
-        if (!store.eqOn) {
-            store.changeEqOn(true)
-            Fx.applyEnabled(true)
-        }
+        if (!store.eqOn) store.changeEqOn(true)
         store.changeEq(g)
-        Fx.apply(g)
+        Fx.update(store)
     }
 
     // Titulo + interruptor
@@ -623,9 +620,8 @@ fun EqSheet(store: Store) {
             Modifier
                 .clip(RoundedCornerShape(14.dp))
                 .clickable {
-                    val v = !store.eqOn
-                    store.changeEqOn(v)
-                    Fx.applyEnabled(v)
+                    store.changeEqOn(!store.eqOn)
+                    Fx.update(store)
                 }
         ) {
             Sw(store.eqOn)
@@ -681,19 +677,19 @@ fun EqSheet(store: Store) {
     if (Fx.bassOk) {
         FxRow("Refuerzo de graves", store.bass) { v ->
             store.changeBass(v)
-            Fx.applyBass(v)
+            Fx.update(store)
         }
     }
     if (Fx.virtOk) {
         FxRow("Sonido envolvente", store.virt) { v ->
             store.changeVirt(v)
-            Fx.applyVirt(v)
+            Fx.update(store)
         }
     }
     if (Fx.boostOk) {
         FxRow("Volumen extra", store.boost, "Sube hasta +6 dB. Si suena distorsionado, bájalo.") { v ->
             store.changeBoost(v)
-            Fx.applyBoost(v)
+            Fx.update(store)
         }
     }
     if (!Fx.bassOk && !Fx.virtOk && !Fx.boostOk) {
@@ -716,13 +712,10 @@ fun EqSheet(store: Store) {
             .clickable {
                 val zeros = listOf(0, 0, 0, 0, 0)
                 store.changeEq(zeros)
-                Fx.apply(zeros)
                 store.changeBass(0)
-                Fx.applyBass(0)
                 store.changeVirt(0)
-                Fx.applyVirt(0)
                 store.changeBoost(0)
-                Fx.applyBoost(0)
+                Fx.update(store)
             }
             .padding(13.dp),
         contentAlignment = Alignment.Center
