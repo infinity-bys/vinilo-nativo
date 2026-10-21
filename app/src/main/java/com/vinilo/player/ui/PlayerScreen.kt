@@ -360,6 +360,22 @@ private fun SeekRow(holder: PlayerHolder, look: Look) {
 private val modeNames = listOf("Repetir todas", "Repetir una", "Aleatorio")
 private val modeIcons = listOf(R.drawable.ic_repeat, R.drawable.ic_repeat_one, R.drawable.ic_shuffle)
 
+/** Boton redondo solo con icono (ecualizador y repetir). */
+@Composable
+private fun RoundBtn(icon: Int, desc: String, on: Boolean, acc: Color, onClick: () -> Unit) {
+    Box(
+        Modifier
+            .size(52.dp)
+            .clip(CircleShape)
+            .background(if (on) acc.copy(alpha = 0.14f) else C.Bg)
+            .border(1.dp, if (on) acc else C.Line, CircleShape)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(painterResource(icon), desc, tint = if (on) acc else C.Mute, modifier = Modifier.size(24.dp))
+    }
+}
+
 @Composable
 private fun Pill(icon: Int, text: String, on: Boolean, acc: Color, onClick: () -> Unit) {
     val shape = RoundedCornerShape(26.dp)
@@ -395,7 +411,10 @@ fun PlayerScreen(
     onMenu: () -> Unit,
     onEq: () -> Unit,
     onFav: () -> Unit,
-    onMode: () -> Unit
+    onMode: () -> Unit,
+    lyricsOpen: Boolean,
+    onLyricsToggle: () -> Unit,
+    lyrics: LyricsUi
 ) {
     val store = holder.store
     val bgTop by animateColorAsState(look.top, tween(600), label = "bgTop")
@@ -437,45 +456,54 @@ fun PlayerScreen(
             )
         }
 
-        Spacer(Modifier.weight(1f))
+        if (lyricsOpen) {
+            LyricsPanel(
+                holder, lyrics, song, look,
+                Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+            )
+        } else {
+            Spacer(Modifier.weight(1f))
 
-        Disc(discSize, holder.isPlaying, cover, look)
+            Disc(discSize, holder.isPlaying, cover, look)
 
-        Spacer(Modifier.height(14.dp))
-        Bars(
-            holder.isPlaying, look.acc, look.acc2,
-            { holder.livePosition() },
-            Modifier.fillMaxWidth().height(42.dp)
-        )
-        Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(14.dp))
+            Bars(
+                holder.isPlaying, look.acc, look.acc2,
+                { holder.livePosition() },
+                Modifier.fillMaxWidth().height(42.dp)
+            )
+            Spacer(Modifier.height(10.dp))
 
-        val title = if (holder.title.isNotEmpty()) holder.title else song?.title ?: "Elige una canción"
-        val sub = when {
-            holder.artist.isNotEmpty() -> holder.artist
-            song != null -> fmtSize(song.size)
-            else -> "Tu música, sin conexión"
+            val title = if (holder.title.isNotEmpty()) holder.title else song?.title ?: "Elige una canción"
+            val sub = when {
+                holder.artist.isNotEmpty() -> holder.artist
+                song != null -> fmtSize(song.size)
+                else -> "Tu música, sin conexión"
+            }
+            Text(
+                title,
+                color = C.Text,
+                fontFamily = FontFamily.Serif,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 22.sp,
+                maxLines = 1,
+                softWrap = false,
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .basicMarquee(iterations = Int.MAX_VALUE)
+            )
+            Text(
+                sub,
+                color = C.Mute,
+                fontSize = 13.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(top = 2.dp)
+            )
         }
-        Text(
-            title,
-            color = C.Text,
-            fontFamily = FontFamily.Serif,
-            fontWeight = FontWeight.SemiBold,
-            fontSize = 22.sp,
-            maxLines = 1,
-            softWrap = false,
-            textAlign = TextAlign.Center,
-            modifier = Modifier
-                .fillMaxWidth()
-                .basicMarquee(iterations = Int.MAX_VALUE)
-        )
-        Text(
-            sub,
-            color = C.Mute,
-            fontSize = 13.sp,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(top = 2.dp)
-        )
 
         Spacer(Modifier.height(6.dp))
         SeekRow(holder, look)
@@ -540,8 +568,9 @@ fun PlayerScreen(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Pill(R.drawable.ic_equalizer, "Ecualizador", eqOn, look.acc, onEq)
-            Pill(modeIcons[store.mode], modeNames[store.mode], store.mode > 0, look.acc, onMode)
+            RoundBtn(R.drawable.ic_equalizer, "Ecualizador", eqOn, look.acc, onEq)
+            Pill(R.drawable.ic_lyrics, "Letras", lyricsOpen, look.acc, onLyricsToggle)
+            RoundBtn(modeIcons[store.mode], modeNames[store.mode], store.mode > 0, look.acc, onMode)
         }
     }
     }

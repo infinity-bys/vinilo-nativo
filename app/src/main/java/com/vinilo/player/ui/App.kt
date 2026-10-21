@@ -35,6 +35,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -51,11 +52,16 @@ import com.vinilo.player.Fx
 import com.vinilo.player.PlayerHolder
 import com.vinilo.player.R
 import com.vinilo.player.data.CoverCache
+import com.vinilo.player.data.LrcResult
 import com.vinilo.player.data.Library
+import com.vinilo.player.data.Lyrics
+import com.vinilo.player.data.LyricsApi
+import com.vinilo.player.data.LyricsStore
 import com.vinilo.player.data.Playlist
 import com.vinilo.player.data.Song
 import com.vinilo.player.data.sortSongs
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 private fun hasAudioPermission(context: Context): Boolean {
@@ -77,6 +83,9 @@ sealed interface Sheet {
     data object Sort : Sheet
     data object Eq : Sheet
     data object PlayerMenu : Sheet
+    data object LyricsAdd : Sheet
+    data object LyricsResults : Sheet
+    data object LyricsPaste : Sheet
     class AddTo(val ids: List<Long>) : Sheet
     class Name(val title: String, val initial: String, val okText: String, val onOk: (String) -> Unit) : Sheet
 }
@@ -233,10 +242,97 @@ fun VinyloApp(holder: PlayerHolder) {
         return shown.filter { it.id in cur }.map { it.id }
     }
 
+    // ---------- Letras ----------
+    val scope = rememberCoroutineScope()
+    var lyricsOpen by remember { mutableStateOf(false) }
+    var lyricsVersion by remember { mutableIntStateOf(0) }
+    var lyricBusy by remember { mutableStateOf(false) }
+    var searchBusy by remember { mutableStateOf(false) }
+    var lyricResults by remember { mutableStateOf<List<LrcResult>?>(null) }
+    val triedAuto = remember { mutableSetOf<Long>() }
+
+    val slot by produceState<LyricsSlot?>(null, current?.id, lyricsVersion) {
+        val cs = current
+        value = if (cs == null) null else LyricsSlot(cs.id, withContext(Dispatchers.IO) { LyricsStore.load(context, cs.id) })
+    }
+    val sl = slot
+    val lyricsLoaded = sl != null && sl.id == current?.id
+    val lyrics: Lyrics? = if (lyricsLoaded) sl?.lyrics else null
+
+    fun saveLyrics(id: Long, raw: String) {
+        LyricsStore.save(context, id, raw)
+        triedAuto.add(id)
+        lyricsVersion++
+    }
+
+    fun runSearch(query: String?) {
+        val cs = current ?: return
+        searchBusy = true
+        lyricResults = null
+        scope.launch {
+            val r = withContext(Dispatchers.IO) {
+                if (query == null) LyricsApi.searchTrack(cs.title, cs.artist) else LyricsApi.search(query)
+            }
+            lyricResults = r
+            searchBusy = false
+        }
+    }
+
+    // Al abrir "Letras" en una cancion sin letra, intenta buscarla sola (una vez por cancion)
+    LaunchedEffect(lyricsOpen, showPlayer, current?.id, lyricsLoaded) {
+        val cs = current
+        if (lyricsOpen && showPlayer && cs != null && lyricsLoaded && lyrics == null && cs.id !in triedAuto) {
+            triedAuto.add(cs.id)
+            scope.launch {
+                lyricBusy = true
+                val raw = withContext(Dispatchers.IO) { LyricsApi.best(cs) }
+                lyricBusy = false
+                if (raw != null) {
+                    LyricsStore.save(context, cs.id, raw)
+                    lyricsVersion++
+                }
+            }
+        }
+    }
+
+    val lrcLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        val cs = current
+        if (uri != null && cs != null) {
+            scope.launch {
+                val text = withContext(Dispatchers.IO) {
+                    try {
+                        context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
+                    } catch (e: Exception) {
+                        null
+                    }
+                }
+                if (text.isNullOrBlank()) {
+                    toast("No pude leer ese archivo")
+                } else {
+                    saveLyrics(cs.id, text)
+                    toast("Letra agregada")
+                }
+            }
+        }
+    }
+
+    val lyricsUi = LyricsUi(
+        lyrics = lyrics,
+        busy = lyricBusy,
+        onAdd = { sheet = Sheet.LyricsAdd },
+        onSearch = {
+            sheet = Sheet.LyricsResults
+            runSearch(null)
+        },
+        onEdit = { sheet = Sheet.LyricsAdd }
+    )
+
     BackHandler(enabled = sel != null || showPlayer || plSelId != null || filter != 0) {
         when {
             sel != null -> sel = null
-            showPlayer -> showPlayer = false
+            showPlayer -> {
+                if (lyricsOpen) lyricsOpen = false else showPlayer = false
+            }
             plSelId != null -> plSelId = null
             else -> filter = 0
         }
@@ -342,7 +438,10 @@ fun VinyloApp(holder: PlayerHolder) {
                 cover = coverImg,
                 look = look,
                 isFav = holder.currentId in store.favs,
-                onBack = { showPlayer = false },
+                onBack = {
+                    showPlayer = false
+                    lyricsOpen = false
+                },
                 onSettings = { sheet = Sheet.Settings },
                 onMenu = { sheet = Sheet.PlayerMenu },
                 onEq = { sheet = Sheet.Eq },
@@ -353,7 +452,10 @@ fun VinyloApp(holder: PlayerHolder) {
                     val m = (store.mode + 1) % 3
                     holder.applyMode(m)
                     toast(modeLabels[m])
-                }
+                },
+                lyricsOpen = lyricsOpen,
+                onLyricsToggle = { lyricsOpen = !lyricsOpen },
+                lyrics = lyricsUi
             )
         }
         // ---------- Elegir canciones para una playlist ----------
@@ -427,7 +529,54 @@ fun VinyloApp(holder: PlayerHolder) {
                         }
                     )
 
-                    is Sheet.Name -> NameSheet(s.title, s.initial, s.okText) { name -> s.onOk(name) }
+                    is Sheet.LyricsAdd -> LyricsAddSheet(
+                    hasLyrics = lyrics != null,
+                    onOnline = {
+                        sheet = Sheet.LyricsResults
+                        runSearch(null)
+                    },
+                    onLocal = {
+                        sheet = null
+                        lrcLauncher.launch(arrayOf("*/*"))
+                    },
+                    onPaste = { sheet = Sheet.LyricsPaste },
+                    onDelete = {
+                        val cs = current
+                        if (cs != null) {
+                            LyricsStore.delete(context, cs.id)
+                            triedAuto.add(cs.id)
+                            lyricsVersion++
+                        }
+                        sheet = null
+                    }
+                )
+
+                is Sheet.LyricsResults -> LyricsResultsSheet(
+                    initialQuery = ((current?.title ?: "") + " " + (current?.artist ?: "")).trim(),
+                    results = lyricResults,
+                    busy = searchBusy,
+                    onSearch = { q -> runSearch(q) },
+                    onPick = { r ->
+                        val cs = current
+                        val raw = r.raw
+                        if (cs != null && raw != null) {
+                            saveLyrics(cs.id, raw)
+                            toast("Letra agregada")
+                        }
+                        sheet = null
+                    }
+                )
+
+                is Sheet.LyricsPaste -> LyricsPasteSheet { text ->
+                    val cs = current
+                    if (cs != null) {
+                        saveLyrics(cs.id, text)
+                        toast("Letra guardada")
+                    }
+                    sheet = null
+                }
+
+                is Sheet.Name -> NameSheet(s.title, s.initial, s.okText) { name -> s.onOk(name) }
                 }
             }
         }

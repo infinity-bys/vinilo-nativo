@@ -87,6 +87,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.vinilo.player.PlayerHolder
 import com.vinilo.player.R
+import com.vinilo.player.data.LrcResult
 import com.vinilo.player.data.Playlist
 import com.vinilo.player.data.Song
 import com.vinilo.player.data.Sorts
@@ -961,6 +962,177 @@ fun NameSheet(title: String, initial: String, okText: String, onOk: (String) -> 
         Text(
             okText,
             color = if (valid) C.Bg else C.Mute,
+            fontWeight = FontWeight.Bold,
+            fontSize = 16.sp
+        )
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Letras: agregar / cambiar, buscar en linea, pegar
+// ---------------------------------------------------------------------------
+@Composable
+fun LyricsAddSheet(
+    hasLyrics: Boolean,
+    onOnline: () -> Unit,
+    onLocal: () -> Unit,
+    onPaste: () -> Unit,
+    onDelete: () -> Unit
+) {
+    SheetTitle(if (hasLyrics) "Cambiar la letra" else "Agregar letra")
+    SheetRow("Buscar en línea", onOnline, icon = R.drawable.ic_search)
+    SheetRow("Añadir letras locales (.lrc o .txt)", onLocal, icon = R.drawable.ic_playlist_add)
+    SheetRow("Pegar o escribir la letra", onPaste, icon = R.drawable.ic_edit)
+    if (hasLyrics) {
+        SheetRow("Quitar la letra", onDelete, icon = R.drawable.ic_delete, danger = true)
+    }
+}
+
+@Composable
+fun LyricsResultsSheet(
+    initialQuery: String,
+    results: List<LrcResult>?,
+    busy: Boolean,
+    onSearch: (String) -> Unit,
+    onPick: (LrcResult) -> Unit
+) {
+    var q by remember { mutableStateOf(initialQuery) }
+    val shape = RoundedCornerShape(16.dp)
+    SheetTitle("Buscar letra")
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(C.Bg)
+            .border(1.dp, C.Line, shape)
+            .padding(start = 16.dp, end = 6.dp, top = 4.dp, bottom = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(Modifier.weight(1f)) {
+            if (q.isEmpty()) {
+                Text("Canción o artista", color = C.Mute, fontSize = 16.sp)
+            }
+            BasicTextField(
+                value = q,
+                onValueChange = { q = it },
+                singleLine = true,
+                textStyle = TextStyle(color = C.Text, fontSize = 16.sp),
+                cursorBrush = SolidColor(C.Acc),
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                keyboardActions = KeyboardActions(onSearch = { onSearch(q) }),
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+        IconBtn(R.drawable.ic_search, "Buscar", { onSearch(q) }, tint = C.Acc)
+    }
+    Spacer(Modifier.height(10.dp))
+    when {
+        busy -> {
+            Text("Buscando…", color = C.Mute, modifier = Modifier.padding(12.dp))
+        }
+        results == null -> {
+        }
+        results.isEmpty() -> {
+            Text(
+                "No encontré letras. Prueba con otro nombre.",
+                color = C.Mute,
+                fontSize = 14.sp,
+                modifier = Modifier.padding(12.dp)
+            )
+        }
+        else -> {
+            for (r in results.take(30)) {
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .clickable { onPick(r) }
+                        .padding(horizontal = 8.dp, vertical = 10.dp)
+                ) {
+                    Text(
+                        r.title,
+                        color = C.Text,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        listOf(r.artist, r.album).filter { it.isNotBlank() }.joinToString(" · "),
+                        color = C.Mute,
+                        fontSize = 13.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Row(Modifier.padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            if (r.hasSynced) "Sincronizada" else "Sin sincronizar",
+                            color = if (r.hasSynced) C.Acc else C.Mute,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        if (r.durationSec > 0) {
+                            Text(
+                                "  ·  " + fmtTime(r.durationSec * 1000L),
+                                color = C.Mute,
+                                fontSize = 12.sp
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun LyricsPasteSheet(onSave: (String) -> Unit) {
+    var text by remember { mutableStateOf("") }
+    val ok = text.isNotBlank()
+    val shape = RoundedCornerShape(16.dp)
+    SheetTitle("Pegar o escribir la letra")
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .height(240.dp)
+            .clip(shape)
+            .background(C.Bg)
+            .border(1.dp, C.Line, shape)
+            .padding(14.dp)
+    ) {
+        if (text.isEmpty()) {
+            Text("Pega aquí la letra…", color = C.Mute, fontSize = 16.sp)
+        }
+        BasicTextField(
+            value = text,
+            onValueChange = { text = it },
+            textStyle = TextStyle(color = C.Text, fontSize = 16.sp),
+            cursorBrush = SolidColor(C.Acc),
+            modifier = Modifier.fillMaxSize()
+        )
+    }
+    Text(
+        "Si trae tiempos como [01:23.45] se sincroniza sola y se resalta mientras suena.",
+        color = C.Mute,
+        fontSize = 13.sp,
+        modifier = Modifier.padding(start = 4.dp, top = 8.dp, bottom = 14.dp)
+    )
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(
+                Brush.linearGradient(
+                    if (ok) listOf(C.Acc, C.Acc2) else listOf(C.Line, C.Line)
+                )
+            )
+            .clickable(enabled = ok) { onSave(text) }
+            .padding(15.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            "Guardar letra",
+            color = if (ok) C.Bg else C.Mute,
             fontWeight = FontWeight.Bold,
             fontSize = 16.sp
         )
