@@ -26,16 +26,14 @@ import kotlin.math.ln
 import kotlin.math.roundToInt
 
 /**
- * Efectos de sonido de Android sobre el reproductor: ecualizador de 5 bandas
- * (60 Hz, 230 Hz, 910 Hz, 3.6 kHz, 14 kHz), refuerzo de graves, sonido envolvente
- * y volumen extra. Viven aqui para seguir activos con la app cerrada.
+ * Efectos de sonido de Android sobre el reproductor: refuerzo de graves, sonido
+ * envolvente y volumen extra. (El ecualizador de 10 bandas es EqProcessor.)
  *
  * Importante: los efectos NUNCA se encienden ni se apagan con la musica sonando
- * (eso hace un chasquido). "Apagar" = llevar todo a cero poco a poco.
+ * (eso hace un chasquido). "Apagar" = llevar el valor a cero poco a poco.
  * Si el telefono no soporta alguno, simplemente no se usa.
  */
 object Fx {
-    private var eq: Equalizer? = null
     private var bassFx: BassBoost? = null
     private var virtFx: Virtualizer? = null
     private var loudFx: LoudnessEnhancer? = null
@@ -58,26 +56,20 @@ object Fx {
     var sessionId: Int = 0
         private set
 
-    private val freqs = intArrayOf(60, 230, 910, 3600, 14000)
-    private var bandMap = IntArray(0)
-    private var bandLo = -1500
-    private var bandHi = 1500
-
-    // Valores 0..4 = bandas (dB), 5 = graves (%), 6 = envolvente (%), 7 = volumen extra (%)
+    // 0 = graves (%), 1 = envolvente (%), 2 = volumen extra (%)
     private val handler = Handler(Looper.getMainLooper())
-    private val cur = FloatArray(8)
-    private val tgt = FloatArray(8)
-    private val applied = IntArray(8) { Int.MIN_VALUE }
+    private val cur = FloatArray(3)
+    private val tgt = FloatArray(3)
+    private val applied = IntArray(3) { Int.MIN_VALUE }
     private var running = false
 
     private val stepper = object : Runnable {
         override fun run() {
             var moving = false
-            for (i in 0 until 8) {
+            for (i in 0 until 3) {
                 val d = tgt[i] - cur[i]
                 if (abs(d) > 0.001f) {
-                    val maxStep = if (i < 5) 1.5f else 8f
-                    cur[i] += d.coerceIn(-maxStep, maxStep)
+                    cur[i] += d.coerceIn(-8f, 8f)
                     moving = true
                 }
             }
@@ -91,42 +83,17 @@ object Fx {
     }
 
     private fun loadTargets(store: Store) {
-        for (i in 0 until 5) {
-            tgt[i] = if (store.eqOn) store.eq.getOrElse(i) { 0 }.toFloat() else 0f
-        }
-        tgt[5] = store.bass.toFloat()
-        tgt[6] = store.virt.toFloat()
-        tgt[7] = store.boost.toFloat()
+        tgt[0] = store.bass.toFloat()
+        tgt[1] = store.virt.toFloat()
+        tgt[2] = store.boost.toFloat()
     }
 
     fun attach(session: Int, store: Store) {
         release()
+        // el ecualizador de 10 bandas no depende de la sesion de audio
+        EqState.load(store)
         sessionId = session
         if (session == 0) return
-        try {
-            val e = Equalizer(0, session)
-            e.setEnabled(true)
-            eq = e
-            val range = e.bandLevelRange
-            bandLo = range[0].toInt()
-            bandHi = range[1].toInt()
-            val n = e.numberOfBands.toInt()
-            bandMap = IntArray(n) { b ->
-                val hz = e.getCenterFreq(b.toShort()) / 1000.0
-                var best = 0
-                var bestD = Double.MAX_VALUE
-                for (i in freqs.indices) {
-                    val d = abs(ln(hz / freqs[i]))
-                    if (d < bestD) {
-                        bestD = d
-                        best = i
-                    }
-                }
-                best
-            }
-        } catch (t: Throwable) {
-            eq = null
-        }
         try {
             val b = BassBoost(0, session)
             if (b.getStrengthSupported()) {
@@ -161,15 +128,16 @@ object Fx {
         }
         // estado inicial: se aplica de golpe (todavia no suena nada)
         loadTargets(store)
-        for (i in 0 until 8) {
+        for (i in 0 until 3) {
             cur[i] = tgt[i]
             applied[i] = Int.MIN_VALUE
         }
         render()
     }
 
-    /** Lleva los efectos a lo que dice el Store, con una transicion suave. */
+    /** Lleva el ecualizador y los efectos a lo que dice el Store, con una transicion suave. */
     fun update(store: Store) {
+        EqState.load(store)
         loadTargets(store)
         if (!running) {
             running = true
@@ -178,43 +146,26 @@ object Fx {
     }
 
     private fun render() {
-        val e = eq
-        if (e != null) {
-            for (ui in 0 until 5) {
-                val mb = (cur[ui] * 100f).roundToInt()
-                if (mb != applied[ui]) {
-                    applied[ui] = mb
-                    for (b in bandMap.indices) {
-                        if (bandMap[b] == ui) {
-                            try {
-                                e.setBandLevel(b.toShort(), mb.coerceIn(bandLo, bandHi).toShort())
-                            } catch (t: Throwable) {
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        val bass = (cur[5] * 10f).roundToInt().coerceIn(0, 1000)
-        if (bass != applied[5]) {
-            applied[5] = bass
+        val bass = (cur[0] * 10f).roundToInt().coerceIn(0, 1000)
+        if (bass != applied[0]) {
+            applied[0] = bass
             try {
                 bassFx?.setStrength(bass.toShort())
             } catch (t: Throwable) {
             }
         }
-        val virt = (cur[6] * 10f).roundToInt().coerceIn(0, 1000)
-        if (virt != applied[6]) {
-            applied[6] = virt
+        val virt = (cur[1] * 10f).roundToInt().coerceIn(0, 1000)
+        if (virt != applied[1]) {
+            applied[1] = virt
             try {
                 virtFx?.setStrength(virt.toShort())
             } catch (t: Throwable) {
             }
         }
         // volumen extra: hasta +6 dB (600 milibelios)
-        val boost = (cur[7] * 6f).roundToInt().coerceIn(0, 600)
-        if (boost != applied[7]) {
-            applied[7] = boost
+        val boost = (cur[2] * 6f).roundToInt().coerceIn(0, 600)
+        if (boost != applied[2]) {
+            applied[2] = boost
             try {
                 loudFx?.setTargetGain(boost)
             } catch (t: Throwable) {
@@ -225,10 +176,6 @@ object Fx {
     fun release() {
         handler.removeCallbacks(stepper)
         running = false
-        try {
-            eq?.release()
-        } catch (t: Throwable) {
-        }
         try {
             bassFx?.release()
         } catch (t: Throwable) {
@@ -241,11 +188,9 @@ object Fx {
             loudFx?.release()
         } catch (t: Throwable) {
         }
-        eq = null
         bassFx = null
         virtFx = null
         loudFx = null
-        bandMap = IntArray(0)
         bassOk = false
         virtOk = false
         boostOk = false
@@ -278,7 +223,7 @@ class PlaybackService : MediaSessionService() {
                 return DefaultAudioSink.Builder(context)
                     .setEnableFloatOutput(enableFloatOutput)
                     .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
-                    .setAudioProcessors(arrayOf<AudioProcessor>(SpectrumTap()))
+                    .setAudioProcessors(arrayOf<AudioProcessor>(EqProcessor(), SpectrumTap()))
                     .build()
             }
         }

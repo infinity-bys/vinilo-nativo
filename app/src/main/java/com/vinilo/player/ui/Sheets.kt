@@ -382,19 +382,19 @@ fun SortSheet(store: Store, close: () -> Unit) {
 // ---------------------------------------------------------------------------
 // Ecualizador: 5 bandas verticales, curva en vivo, presets y efectos
 // ---------------------------------------------------------------------------
-private val eqNames = listOf("60 Hz", "230 Hz", "910 Hz", "3.6 kHz", "14 kHz")
+private val eqNames = listOf("31", "63", "125", "250", "500", "1K", "2K", "4K", "8K", "16K")
 private val eqPresets = listOf(
-    "Normal" to listOf(0, 0, 0, 0, 0),
-    "Graves" to listOf(6, 4, 0, 0, 0),
-    "Voces" to listOf(-2, -1, 3, 4, 1),
-    "Agudos" to listOf(0, 0, 1, 4, 6),
-    "Rock" to listOf(4, 2, -2, 3, 4),
-    "Pop" to listOf(-1, 2, 4, 2, -1),
-    "Hip-Hop" to listOf(5, 3, -1, 1, 2),
-    "Electrónica" to listOf(5, 2, -2, 2, 5),
-    "Jazz" to listOf(3, 2, -2, 2, 4),
-    "Clásica" to listOf(3, 2, -1, 2, 3),
-    "Acústica" to listOf(3, 2, 1, 2, 3)
+    "Normal" to listOf(0, 0, 0, 0, 0, 0, 0, 0, 0, 0),
+    "Graves" to listOf(7, 6, 5, 3, 1, 0, 0, 0, 0, 0),
+    "Voces" to listOf(-2, -2, -1, 1, 3, 4, 4, 2, 0, -1),
+    "Agudos" to listOf(0, 0, 0, 0, 0, 1, 3, 5, 6, 7),
+    "Rock" to listOf(5, 4, 3, 1, -1, -1, 0, 3, 4, 5),
+    "Pop" to listOf(-1, -1, 0, 2, 4, 4, 2, 0, -1, -2),
+    "Hip-Hop" to listOf(6, 5, 3, 2, -1, -1, 1, 0, 2, 3),
+    "Electrónica" to listOf(5, 4, 1, 0, -2, 2, 1, 1, 4, 5),
+    "Jazz" to listOf(4, 3, 1, 2, -2, -2, 0, 1, 3, 4),
+    "Clásica" to listOf(4, 3, 3, 2, -1, -1, 0, 2, 3, 4),
+    "Acústica" to listOf(4, 4, 3, 1, 1, 1, 2, 3, 3, 2)
 )
 
 /** Dibujo suave de como queda el sonido con los ajustes actuales. */
@@ -407,11 +407,12 @@ private fun EqCurve(gains: List<Int>, modifier: Modifier = Modifier) {
         val amp = h / 2f * 0.8f
         drawLine(C.Line, Offset(0f, cy), Offset(w, cy), strokeWidth = 1.dp.toPx())
         val pts = ArrayList<Offset>()
+        val cnt = gains.size
         pts.add(Offset(0f, cy - gains[0] / 12f * amp))
-        for (i in 0 until 5) {
-            pts.add(Offset(w * (i + 0.5f) / 5f, cy - gains[i] / 12f * amp))
+        for (i in 0 until cnt) {
+            pts.add(Offset(w * (i + 0.5f) / cnt, cy - gains[i] / 12f * amp))
         }
-        pts.add(Offset(w, cy - gains[4] / 12f * amp))
+        pts.add(Offset(w, cy - gains[cnt - 1] / 12f * amp))
 
         fun curve(p: Path) {
             p.moveTo(pts[0].x, pts[0].y)
@@ -454,13 +455,13 @@ private fun EqBand(label: String, value: Int, onChange: (Int) -> Unit, modifier:
         Text(
             (if (value > 0) "+" else "") + value,
             color = if (value != 0) C.Acc else C.Mute,
-            fontSize = 13.sp,
+            fontSize = 11.sp,
             fontWeight = FontWeight.SemiBold
         )
         Spacer(Modifier.height(6.dp))
         Box(
             Modifier
-                .width(44.dp)
+                .fillMaxWidth()
                 .height(170.dp)
                 .onSizeChanged { h = it.height.toFloat().coerceAtLeast(1f) }
                 .pointerInput(Unit) {
@@ -509,7 +510,7 @@ private fun EqBand(label: String, value: Int, onChange: (Int) -> Unit, modifier:
             }
         }
         Spacer(Modifier.height(4.dp))
-        Text(label, color = C.Mute, fontSize = 11.sp)
+        Text(label, color = C.Mute, fontSize = 10.sp)
     }
 }
 
@@ -650,7 +651,7 @@ fun EqSheet(store: Store) {
             Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            for (i in 0 until 5) {
+            for (i in 0 until 10) {
                 EqBand(
                     eqNames[i],
                     store.eq[i],
@@ -710,7 +711,7 @@ fun EqSheet(store: Store) {
             .clip(shape)
             .border(1.dp, C.Line, shape)
             .clickable {
-                val zeros = listOf(0, 0, 0, 0, 0)
+                val zeros = List(10) { 0 }
                 store.changeEq(zeros)
                 store.changeBass(0)
                 store.changeVirt(0)

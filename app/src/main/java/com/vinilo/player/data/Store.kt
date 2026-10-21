@@ -123,7 +123,7 @@ class Store private constructor(context: Context) {
 
     fun changeEq(g: List<Int>) {
         eq = g
-        sp.edit().putString("eq", g.joinToString(",")).apply()
+        sp.edit().putString("eq10", g.joinToString(",")).apply()
     }
 
     fun changeEqOn(v: Boolean) {
@@ -254,9 +254,9 @@ class Store private constructor(context: Context) {
     }
 
     private fun readEq(): List<Int> {
-        val s = sp.getString("eq", "") ?: ""
+        val s = sp.getString("eq10", "") ?: ""
         val l = s.split(",").mapNotNull { it.toIntOrNull() }
-        return if (l.size == 5) l else listOf(0, 0, 0, 0, 0)
+        return if (l.size == 10) l else List(10) { 0 }
     }
 
     companion object {
