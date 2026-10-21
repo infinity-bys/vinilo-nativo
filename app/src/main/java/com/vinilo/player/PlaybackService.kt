@@ -3,7 +3,10 @@ package com.vinilo.player
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.media.audiofx.BassBoost
 import android.media.audiofx.Equalizer
+import android.media.audiofx.LoudnessEnhancer
+import android.media.audiofx.Virtualizer
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.audio.AudioProcessor
 import androidx.media3.common.util.UnstableApi
@@ -20,30 +23,87 @@ import kotlin.math.abs
 import kotlin.math.ln
 
 /**
- * Ecualizador de 5 bandas (60 Hz, 230 Hz, 910 Hz, 3.6 kHz, 14 kHz) sobre el
- * ecualizador del sistema. Vive aqui para que siga activo con la app cerrada.
+ * Efectos de sonido de Android sobre el reproductor: ecualizador de 5 bandas
+ * (60 Hz, 230 Hz, 910 Hz, 3.6 kHz, 14 kHz), refuerzo de graves, sonido envolvente
+ * y volumen extra. Viven aqui para seguir activos con la app cerrada.
+ * Si el telefono no soporta alguno, simplemente no se usa.
  */
 object Fx {
     private var eq: Equalizer? = null
+    private var bassFx: BassBoost? = null
+    private var virtFx: Virtualizer? = null
+    private var loudFx: LoudnessEnhancer? = null
 
-    /** Id de sesion de audio del reproductor (lo usa el visualizador). */
+    /** Cuales efectos existen en este telefono (la pantalla solo muestra los que si). */
+    @Volatile
+    var bassOk: Boolean = false
+        private set
+
+    @Volatile
+    var virtOk: Boolean = false
+        private set
+
+    @Volatile
+    var boostOk: Boolean = false
+        private set
+
+    /** Id de sesion de audio del reproductor. */
     @Volatile
     var sessionId: Int = 0
         private set
 
     private val freqs = intArrayOf(60, 230, 910, 3600, 14000)
 
-    fun attach(session: Int, gains: List<Int>) {
+    fun attach(session: Int, store: Store) {
         release()
         sessionId = session
         if (session == 0) return
         try {
             val e = Equalizer(0, session)
-            e.setEnabled(true)
+            e.setEnabled(store.eqOn)
             eq = e
-            apply(gains)
         } catch (t: Throwable) {
             eq = null
+        }
+        try {
+            val b = BassBoost(0, session)
+            if (b.getStrengthSupported()) {
+                bassFx = b
+                bassOk = true
+            } else {
+                b.release()
+            }
+        } catch (t: Throwable) {
+            bassFx = null
+        }
+        try {
+            val v = Virtualizer(0, session)
+            if (v.getStrengthSupported()) {
+                virtFx = v
+                virtOk = true
+            } else {
+                v.release()
+            }
+        } catch (t: Throwable) {
+            virtFx = null
+        }
+        try {
+            val l = LoudnessEnhancer(session)
+            loudFx = l
+            boostOk = true
+        } catch (t: Throwable) {
+            loudFx = null
+        }
+        apply(store.eq)
+        applyBass(store.bass)
+        applyVirt(store.virt)
+        applyBoost(store.boost)
+    }
+
+    fun applyEnabled(on: Boolean) {
+        try {
+            eq?.setEnabled(on)
+        } catch (t: Throwable) {
         }
     }
 
@@ -75,12 +135,56 @@ object Fx {
         }
     }
 
+    /** pct de 0 a 100 */
+    fun applyBass(pct: Int) {
+        try {
+            bassFx?.setStrength((pct * 10).coerceIn(0, 1000).toShort())
+            bassFx?.setEnabled(pct > 0)
+        } catch (t: Throwable) {
+        }
+    }
+
+    fun applyVirt(pct: Int) {
+        try {
+            virtFx?.setStrength((pct * 10).coerceIn(0, 1000).toShort())
+            virtFx?.setEnabled(pct > 0)
+        } catch (t: Throwable) {
+        }
+    }
+
+    /** Volumen extra: hasta +6 dB */
+    fun applyBoost(pct: Int) {
+        try {
+            loudFx?.setTargetGain(pct * 6)
+            loudFx?.setEnabled(pct > 0)
+        } catch (t: Throwable) {
+        }
+    }
+
     fun release() {
         try {
             eq?.release()
         } catch (t: Throwable) {
         }
+        try {
+            bassFx?.release()
+        } catch (t: Throwable) {
+        }
+        try {
+            virtFx?.release()
+        } catch (t: Throwable) {
+        }
+        try {
+            loudFx?.release()
+        } catch (t: Throwable) {
+        }
         eq = null
+        bassFx = null
+        virtFx = null
+        loudFx = null
+        bassOk = false
+        virtOk = false
+        boostOk = false
     }
 }
 
@@ -121,10 +225,10 @@ class PlaybackService : MediaSessionService() {
             .build()
 
         val store = Store.get(this)
-        Fx.attach(player.audioSessionId, store.eq)
+        Fx.attach(player.audioSessionId, store)
         player.addListener(object : Player.Listener {
             override fun onAudioSessionIdChanged(audioSessionId: Int) {
-                Fx.attach(audioSessionId, store.eq)
+                Fx.attach(audioSessionId, store)
             }
         })
 

@@ -15,6 +15,9 @@ object Spectrum {
     private var head = -1
     private var count = 0
 
+    /** Cuanto se adelanta el audio ya analizado respecto a lo que se escucha (se aprende solo). */
+    private var leadEst = 400f
+
     /** Posicion de la cancion (ms) en la que empezo el flujo de audio analizado. */
     @Volatile
     var base = 0L
@@ -37,7 +40,15 @@ object Spectrum {
     @Synchronized
     fun fill(mediaMs: Long, out: FloatArray): Boolean {
         if (count == 0) return false
-        val target = mediaMs - base
+        var target = mediaMs - base
+        val lead = (times[head] - target).toFloat()
+        if (lead < 0f || lead > leadEst * 2f + 400f) {
+            // Desfasado (por ejemplo al reabrir la app con la cancion en pausa): se recalibra solo
+            base = mediaMs - (times[head] - leadEst.toLong())
+            target = mediaMs - base
+        } else {
+            leadEst = leadEst * 0.97f + lead * 0.03f
+        }
         for (n in 0 until count) {
             val i = ((head - n) % RING + RING) % RING
             if (times[i] <= target) {

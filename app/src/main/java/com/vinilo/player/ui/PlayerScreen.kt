@@ -400,7 +400,7 @@ fun PlayerScreen(
     val store = holder.store
     val bgTop by animateColorAsState(look.top, tween(600), label = "bgTop")
     val bgBottom by animateColorAsState(look.bottom, tween(600), label = "bgBottom")
-    val eqOn = store.eq.any { it != 0 }
+    val eqOn = store.eqOn && (store.eq.any { it != 0 } || store.bass > 0 || store.virt > 0 || store.boost > 0)
     val sleepOn = holder.sleepEndAt > 0L || holder.sleepEot
 
     BoxWithConstraints(Modifier.fillMaxSize()) {

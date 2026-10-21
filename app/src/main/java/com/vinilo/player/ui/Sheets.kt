@@ -1,6 +1,21 @@
 package com.vinilo.player.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
+import com.vinilo.player.Fx
+import kotlin.math.max
+import kotlin.math.min
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -365,7 +380,7 @@ fun SortSheet(store: Store, close: () -> Unit) {
 }
 
 // ---------------------------------------------------------------------------
-// Ecualizador de 5 bandas
+// Ecualizador: 5 bandas verticales, curva en vivo, presets y efectos
 // ---------------------------------------------------------------------------
 private val eqNames = listOf("60 Hz", "230 Hz", "910 Hz", "3.6 kHz", "14 kHz")
 private val eqPresets = listOf(
@@ -373,59 +388,346 @@ private val eqPresets = listOf(
     "Graves" to listOf(6, 4, 0, 0, 0),
     "Voces" to listOf(-2, -1, 3, 4, 1),
     "Agudos" to listOf(0, 0, 1, 4, 6),
-    "Rock" to listOf(4, 2, -2, 3, 4)
+    "Rock" to listOf(4, 2, -2, 3, 4),
+    "Pop" to listOf(-1, 2, 4, 2, -1),
+    "Hip-Hop" to listOf(5, 3, -1, 1, 2),
+    "Electrónica" to listOf(5, 2, -2, 2, 5),
+    "Jazz" to listOf(3, 2, -2, 2, 4),
+    "Clásica" to listOf(3, 2, -1, 2, 3),
+    "Acústica" to listOf(3, 2, 1, 2, 3)
 )
 
+/** Dibujo suave de como queda el sonido con los ajustes actuales. */
 @Composable
-fun EqSheet(store: Store, onChange: (List<Int>) -> Unit) {
-    SheetTitle("Ecualizador")
+private fun EqCurve(gains: List<Int>, modifier: Modifier = Modifier) {
+    Canvas(modifier) {
+        val w = size.width
+        val h = size.height
+        val cy = h / 2f
+        val amp = h / 2f * 0.8f
+        drawLine(C.Line, Offset(0f, cy), Offset(w, cy), strokeWidth = 1.dp.toPx())
+        val pts = ArrayList<Offset>()
+        pts.add(Offset(0f, cy - gains[0] / 12f * amp))
+        for (i in 0 until 5) {
+            pts.add(Offset(w * (i + 0.5f) / 5f, cy - gains[i] / 12f * amp))
+        }
+        pts.add(Offset(w, cy - gains[4] / 12f * amp))
+
+        fun curve(p: Path) {
+            p.moveTo(pts[0].x, pts[0].y)
+            for (i in 0 until pts.size - 1) {
+                val mx = (pts[i].x + pts[i + 1].x) / 2f
+                p.cubicTo(mx, pts[i].y, mx, pts[i + 1].y, pts[i + 1].x, pts[i + 1].y)
+            }
+        }
+
+        val fill = Path()
+        curve(fill)
+        fill.lineTo(w, cy)
+        fill.lineTo(0f, cy)
+        fill.close()
+        drawPath(fill, C.Acc.copy(alpha = 0.14f))
+
+        val line = Path()
+        curve(line)
+        drawPath(
+            line,
+            Brush.horizontalGradient(listOf(C.Acc, C.Acc2)),
+            style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round)
+        )
+    }
+}
+
+/** Una banda: slider vertical fino con un puntico, de -12 a +12 dB. */
+@Composable
+private fun EqBand(label: String, value: Int, onChange: (Int) -> Unit, modifier: Modifier = Modifier) {
+    var h by remember { mutableFloatStateOf(1f) }
+    val change = rememberUpdatedState(onChange)
+    val pad = with(LocalDensity.current) { 10.dp.toPx() }
+
+    fun valueAt(y: Float): Int {
+        val f = (1f - (y - pad) / (h - 2f * pad)).coerceIn(0f, 1f)
+        return (-12f + f * 24f).roundToInt()
+    }
+
+    Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(
+            (if (value > 0) "+" else "") + value,
+            color = if (value != 0) C.Acc else C.Mute,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.SemiBold
+        )
+        Spacer(Modifier.height(6.dp))
+        Box(
+            Modifier
+                .width(44.dp)
+                .height(170.dp)
+                .onSizeChanged { h = it.height.toFloat().coerceAtLeast(1f) }
+                .pointerInput(Unit) {
+                    detectTapGestures { o -> change.value(valueAt(o.y)) }
+                }
+                .pointerInput(Unit) {
+                    detectVerticalDragGestures(
+                        onDragStart = { o -> change.value(valueAt(o.y)) }
+                    ) { c, _ ->
+                        c.consume()
+                        change.value(valueAt(c.position.y))
+                    }
+                }
+        ) {
+            Canvas(Modifier.fillMaxSize()) {
+                val cx = size.width / 2f
+                val tw = 4.dp.toPx()
+                val top = pad
+                val bot = size.height - pad
+                val mid = (top + bot) / 2f
+                val ty = bot - (value + 12f) / 24f * (bot - top)
+                drawRoundRect(
+                    C.Line,
+                    Offset(cx - tw / 2f, top),
+                    Size(tw, bot - top),
+                    CornerRadius(tw / 2f, tw / 2f)
+                )
+                drawLine(
+                    C.Mute,
+                    Offset(cx - 11.dp.toPx(), mid),
+                    Offset(cx + 11.dp.toPx(), mid),
+                    strokeWidth = 1.5.dp.toPx()
+                )
+                val y0 = min(mid, ty)
+                val y1 = max(mid, ty)
+                if (y1 - y0 > 0.5f) {
+                    drawRoundRect(
+                        brush = Brush.verticalGradient(listOf(C.Acc, C.Acc2), startY = top, endY = bot),
+                        topLeft = Offset(cx - tw / 2f, y0),
+                        size = Size(tw, y1 - y0),
+                        cornerRadius = CornerRadius(tw / 2f, tw / 2f)
+                    )
+                }
+                drawCircle(C.Text, radius = 9.dp.toPx(), center = Offset(cx, ty))
+                drawCircle(C.Acc, radius = 4.dp.toPx(), center = Offset(cx, ty))
+            }
+        }
+        Spacer(Modifier.height(4.dp))
+        Text(label, color = C.Mute, fontSize = 11.sp)
+    }
+}
+
+/** Slider horizontal fino (linea + puntico) para los efectos. */
+@Composable
+private fun ThinSlider(frac: Float, onChange: (Float) -> Unit, modifier: Modifier = Modifier) {
+    var w by remember { mutableFloatStateOf(1f) }
+    val change = rememberUpdatedState(onChange)
+    Box(
+        modifier
+            .height(32.dp)
+            .onSizeChanged { w = it.width.toFloat().coerceAtLeast(1f) }
+            .pointerInput(Unit) {
+                detectTapGestures { o -> change.value((o.x / w).coerceIn(0f, 1f)) }
+            }
+            .pointerInput(Unit) {
+                detectHorizontalDragGestures(
+                    onDragStart = { o -> change.value((o.x / w).coerceIn(0f, 1f)) }
+                ) { c, _ ->
+                    c.consume()
+                    change.value((c.position.x / w).coerceIn(0f, 1f))
+                }
+            }
+    ) {
+        Canvas(Modifier.fillMaxSize()) {
+            val th = 4.dp.toPx()
+            val cy = size.height / 2f
+            val x = size.width * frac
+            drawRoundRect(
+                C.Line,
+                Offset(0f, cy - th / 2f),
+                Size(size.width, th),
+                CornerRadius(th / 2f, th / 2f)
+            )
+            drawRoundRect(
+                brush = Brush.horizontalGradient(listOf(C.Acc, C.Acc2), startX = 0f, endX = max(size.width, 1f)),
+                topLeft = Offset(0f, cy - th / 2f),
+                size = Size(x, th),
+                cornerRadius = CornerRadius(th / 2f, th / 2f)
+            )
+            drawCircle(C.Text, radius = 8.dp.toPx(), center = Offset(x, cy))
+            drawCircle(C.Acc, radius = 3.5.dp.toPx(), center = Offset(x, cy))
+        }
+    }
+}
+
+@Composable
+private fun FxRow(label: String, pct: Int, hint: String? = null, onPct: (Int) -> Unit) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .padding(top = 8.dp)
+    ) {
+        Row(
+            Modifier.padding(horizontal = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(label, color = C.Text, fontSize = 15.sp, modifier = Modifier.weight(1f))
+            Text(
+                "$pct%",
+                color = if (pct > 0) C.Acc else C.Mute,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold
+            )
+        }
+        ThinSlider(
+            pct / 100f,
+            { f -> onPct((f * 100f).roundToInt()) },
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp)
+        )
+        if (hint != null) {
+            Text(hint, color = C.Mute, fontSize = 12.sp, modifier = Modifier.padding(start = 4.dp))
+        }
+    }
+}
+
+@Composable
+fun EqSheet(store: Store) {
+    fun setGains(g: List<Int>) {
+        // mover cualquier cosa enciende el ecualizador
+        if (!store.eqOn) {
+            store.changeEqOn(true)
+            Fx.applyEnabled(true)
+        }
+        store.changeEq(g)
+        Fx.apply(g)
+    }
+
+    // Titulo + interruptor
     Row(
         Modifier
             .fillMaxWidth()
-            .horizontalScroll(rememberScrollState()),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
+            .padding(bottom = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        for ((name, v) in eqPresets) {
-            Chip(name, store.eq == v, { onChange(v) })
+        Text(
+            "Ecualizador",
+            color = C.Text,
+            fontFamily = FontFamily.Serif,
+            fontWeight = FontWeight.SemiBold,
+            fontSize = 18.sp,
+            modifier = Modifier
+                .weight(1f)
+                .padding(start = 4.dp)
+        )
+        Text(if (store.eqOn) "Activado" else "Apagado", color = C.Mute, fontSize = 13.sp)
+        Spacer(Modifier.width(10.dp))
+        Box(
+            Modifier
+                .clip(RoundedCornerShape(14.dp))
+                .clickable {
+                    val v = !store.eqOn
+                    store.changeEqOn(v)
+                    Fx.applyEnabled(v)
+                }
+        ) {
+            Sw(store.eqOn)
         }
     }
-    Spacer(Modifier.height(8.dp))
-    for (i in 0 until 5) {
-        val v = store.eq[i]
+
+    Column(Modifier.alpha(if (store.eqOn) 1f else 0.45f)) {
         Row(
             Modifier
                 .fillMaxWidth()
-                .padding(vertical = 2.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Text(eqNames[i], color = C.Mute, fontSize = 13.sp, modifier = Modifier.width(58.dp))
-            Slider(
-                value = v.toFloat(),
-                onValueChange = { x ->
-                    val n = store.eq.toMutableList()
-                    n[i] = x.roundToInt()
-                    onChange(n)
-                },
-                valueRange = -12f..12f,
-                steps = 23,
-                modifier = Modifier.weight(1f),
-                colors = SliderDefaults.colors(
-                    thumbColor = C.Text,
-                    activeTrackColor = C.Acc,
-                    inactiveTrackColor = C.Line,
-                    activeTickColor = Color.Transparent,
-                    inactiveTickColor = Color.Transparent
-                )
-            )
-            Text(
-                (if (v > 0) "+" else "") + v + " dB",
-                color = C.Text,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.SemiBold,
-                textAlign = androidx.compose.ui.text.style.TextAlign.End,
-                modifier = Modifier.width(56.dp)
-            )
+            for ((name, v) in eqPresets) {
+                Chip(name, store.eq == v, { setGains(v) })
+            }
         }
+        Spacer(Modifier.height(14.dp))
+        EqCurve(
+            store.eq,
+            Modifier
+                .fillMaxWidth()
+                .height(64.dp)
+        )
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            for (i in 0 until 5) {
+                EqBand(
+                    eqNames[i],
+                    store.eq[i],
+                    { v ->
+                        val g = store.eq.toMutableList()
+                        g[i] = v
+                        setGains(g)
+                    },
+                    Modifier.weight(1f)
+                )
+            }
+        }
+    }
+
+    // Efectos extra (solo los que tu telefono soporta)
+    Spacer(Modifier.height(18.dp))
+    Text(
+        "Efectos de sonido",
+        color = C.Mute,
+        fontSize = 13.sp,
+        fontWeight = FontWeight.Bold,
+        modifier = Modifier.padding(start = 4.dp)
+    )
+    if (Fx.bassOk) {
+        FxRow("Refuerzo de graves", store.bass) { v ->
+            store.changeBass(v)
+            Fx.applyBass(v)
+        }
+    }
+    if (Fx.virtOk) {
+        FxRow("Sonido envolvente", store.virt) { v ->
+            store.changeVirt(v)
+            Fx.applyVirt(v)
+        }
+    }
+    if (Fx.boostOk) {
+        FxRow("Volumen extra", store.boost, "Sube hasta +6 dB. Si suena distorsionado, bájalo.") { v ->
+            store.changeBoost(v)
+            Fx.applyBoost(v)
+        }
+    }
+    if (!Fx.bassOk && !Fx.virtOk && !Fx.boostOk) {
+        Text(
+            "Tu teléfono no ofrece más efectos.",
+            color = C.Mute,
+            fontSize = 13.sp,
+            modifier = Modifier.padding(start = 4.dp, top = 8.dp)
+        )
+    }
+
+    // Restablecer
+    val shape = RoundedCornerShape(16.dp)
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .padding(top = 18.dp)
+            .clip(shape)
+            .border(1.dp, C.Line, shape)
+            .clickable {
+                val zeros = listOf(0, 0, 0, 0, 0)
+                store.changeEq(zeros)
+                Fx.apply(zeros)
+                store.changeBass(0)
+                Fx.applyBass(0)
+                store.changeVirt(0)
+                Fx.applyVirt(0)
+                store.changeBoost(0)
+                Fx.applyBoost(0)
+            }
+            .padding(13.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text("Restablecer todo", color = C.Mute, fontWeight = FontWeight.SemiBold)
     }
 }
 

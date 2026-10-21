@@ -392,10 +392,7 @@ fun VinyloApp(holder: PlayerHolder) {
 
                     is Sheet.Sort -> SortSheet(store, close)
 
-                    is Sheet.Eq -> EqSheet(store) { g ->
-                        store.changeEq(g)
-                        Fx.apply(g)
-                    }
+                    is Sheet.Eq -> EqSheet(store)
 
                     is Sheet.PlayerMenu -> PlayerMenuSheet(
                         song = current,

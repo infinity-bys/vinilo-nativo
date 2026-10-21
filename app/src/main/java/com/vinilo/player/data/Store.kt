@@ -46,6 +46,15 @@ class Store private constructor(context: Context) {
         private set
     var eq by mutableStateOf(readEq())
         private set
+    var eqOn by mutableStateOf(sp.getBoolean("eqOn", true))
+        private set
+    /** Refuerzo de graves, sonido envolvente y volumen extra: de 0 a 100 */
+    var bass by mutableStateOf(sp.getInt("bass", 0))
+        private set
+    var virt by mutableStateOf(sp.getInt("virt", 0))
+        private set
+    var boost by mutableStateOf(sp.getInt("boost", 0))
+        private set
 
     // ---------- Favoritos ----------
     fun toggleFav(id: Long) {
@@ -115,6 +124,26 @@ class Store private constructor(context: Context) {
     fun changeEq(g: List<Int>) {
         eq = g
         sp.edit().putString("eq", g.joinToString(",")).apply()
+    }
+
+    fun changeEqOn(v: Boolean) {
+        eqOn = v
+        sp.edit().putBoolean("eqOn", v).apply()
+    }
+
+    fun changeBass(v: Int) {
+        bass = v.coerceIn(0, 100)
+        sp.edit().putInt("bass", bass).apply()
+    }
+
+    fun changeVirt(v: Int) {
+        virt = v.coerceIn(0, 100)
+        sp.edit().putInt("virt", virt).apply()
+    }
+
+    fun changeBoost(v: Int) {
+        boost = v.coerceIn(0, 100)
+        sp.edit().putInt("boost", boost).apply()
     }
 
     // ---------- Ultima cancion ----------
