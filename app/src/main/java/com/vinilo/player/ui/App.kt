@@ -43,6 +43,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -124,6 +125,7 @@ private fun SelActions(inPlaylist: Boolean, onAdd: () -> Unit, onHide: () -> Uni
 @Composable
 fun VinyloApp(holder: PlayerHolder) {
     val context = LocalContext.current
+    val focus = LocalFocusManager.current
     val store = holder.store
 
     var granted by remember { mutableStateOf(hasAudioPermission(context)) }
@@ -153,6 +155,15 @@ fun VinyloApp(holder: PlayerHolder) {
             allSongs = withContext(Dispatchers.IO) { Library.scan(context) }
             scanned = true
         }
+    }
+
+    // Al abrir el reproductor o una hoja, el cuadro de busqueda suelta el foco:
+    // se va el teclado y la gotita del cursor que se veia encima.
+    LaunchedEffect(showPlayer) {
+        if (showPlayer) focus.clearFocus()
+    }
+    LaunchedEffect(sheet) {
+        if (sheet != null) focus.clearFocus()
     }
 
     // ---------- Listas derivadas ----------
