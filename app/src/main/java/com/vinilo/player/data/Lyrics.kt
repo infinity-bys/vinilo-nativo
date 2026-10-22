@@ -6,7 +6,7 @@ import java.io.File
 /** Una linea de letra. timeMs = -1 cuando la letra no esta sincronizada. */
 class LyricLine(val timeMs: Long, val text: String)
 
-class Lyrics(val lines: List<LyricLine>, val synced: Boolean)
+class Lyrics(val lines: List<LyricLine>, val synced: Boolean, val estimated: Boolean = false)
 
 /** Lee letras en formato LRC ([01:23.45] texto) o texto simple. */
 object LyricsParser {

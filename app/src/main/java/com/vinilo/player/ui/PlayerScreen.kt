@@ -558,7 +558,7 @@ fun PlayerScreen(
             }
         }
 
-        Spacer(Modifier.weight(0.6f))
+        if (lyricsOpen) Spacer(Modifier.height(14.dp)) else Spacer(Modifier.weight(0.6f))
 
         // Ecualizador y modo de reproduccion
         Row(

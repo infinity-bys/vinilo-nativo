@@ -58,6 +58,8 @@ fun plural(n: Int, one: String, many: String): String = "$n " + (if (n == 1) one
 fun Cover(song: Song, size: Dp, modifier: Modifier = Modifier, shape: Shape = RoundedCornerShape(14.dp)) {
     val context = LocalContext.current
     val bmp by produceState<ImageBitmap?>(CoverCache.get(song.id), song.id) {
+        // al cambiar de cancion hay que soltar la imagen anterior (si no, se queda la vieja)
+        value = CoverCache.get(song.id)
         if (value == null) {
             value = withContext(Dispatchers.IO) { CoverCache.load(context, song) }
         }

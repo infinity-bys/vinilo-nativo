@@ -46,9 +46,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.vinilo.player.PlayerHolder
 import com.vinilo.player.R
+import com.vinilo.player.data.LyricLine
 import com.vinilo.player.data.Lyrics
 import com.vinilo.player.data.Song
-import kotlin.math.ceil
 import kotlin.math.max
 import kotlin.math.min
 
@@ -100,8 +100,34 @@ fun LyricsPanel(holder: PlayerHolder, ui: LyricsUi, song: Song?, look: Look, mod
             }
         }
         val lyr = ui.lyrics
+        val dur = holder.durationMs
+        // Las letras sin tiempos se reparten a lo largo de la cancion (aproximado) para
+        // que se vean y se muevan igual que las sincronizadas.
+        val eff: Lyrics? = remember(lyr, dur) {
+            if (lyr == null || lyr.synced || dur <= 0L) lyr else estimateTimes(lyr, dur)
+        }
+        if (eff != null && eff.estimated) {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Sincronización aproximada", color = C.Mute, fontSize = 12.sp)
+                Text(
+                    "  ·  Buscar versión sincronizada",
+                    color = look.acc,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable(onClick = ui.onSearch)
+                        .padding(vertical = 4.dp)
+                )
+            }
+        }
         when {
-            lyr == null && ui.busy -> {
+            eff == null && ui.busy -> {
                 Box(
                     Modifier
                         .weight(1f)
@@ -111,26 +137,42 @@ fun LyricsPanel(holder: PlayerHolder, ui: LyricsUi, song: Song?, look: Look, mod
                     Text("Buscando letra…", color = C.Mute, fontSize = 16.sp)
                 }
             }
-            lyr == null -> NoLyrics(
+            eff == null -> NoLyrics(
                 ui, look,
                 Modifier
                     .weight(1f)
                     .fillMaxWidth()
             )
-            lyr.synced -> SyncedLyrics(
-                holder, lyr, look,
+            eff.synced -> SyncedLyrics(
+                holder, eff, look, !eff.estimated,
                 Modifier
                     .weight(1f)
                     .fillMaxWidth()
             )
             else -> PlainLyrics(
-                lyr,
+                eff, look,
                 Modifier
                     .weight(1f)
                     .fillMaxWidth()
             )
         }
     }
+}
+
+/** Reparte las lineas a lo largo de la cancion segun su largo (para letras sin tiempos). */
+private fun estimateTimes(lyr: Lyrics, durMs: Long): Lyrics {
+    val lines = lyr.lines
+    val w = lines.map { if (it.text.isBlank()) 6 else max(8, it.text.length) }
+    val total = max(1, w.sum()).toFloat()
+    val start = (durMs * 0.05f).coerceIn(5000f, 15000f)
+    val end = durMs * 0.94f
+    var acc = 0f
+    val out = ArrayList<LyricLine>()
+    for (i in lines.indices) {
+        out.add(LyricLine((start + acc / total * (end - start)).toLong(), lines[i].text))
+        acc += w[i]
+    }
+    return Lyrics(out, true, true)
 }
 
 @Composable
@@ -184,7 +226,7 @@ private fun ActionCircle(icon: Int, label: String, filled: Boolean, look: Look, 
  * iluminando al ritmo del habla y la lista se desplaza sola. Tocar una linea salta ahi.
  */
 @Composable
-private fun SyncedLyrics(holder: PlayerHolder, lyr: Lyrics, look: Look, modifier: Modifier) {
+private fun SyncedLyrics(holder: PlayerHolder, lyr: Lyrics, look: Look, canSeek: Boolean, modifier: Modifier) {
     val lines = lyr.lines
     var pos by remember { mutableLongStateOf(holder.positionMs) }
     // mientras suena, la posicion se lee en cada fotograma
@@ -213,8 +255,12 @@ private fun SyncedLyrics(holder: PlayerHolder, lyr: Lyrics, look: Look, modifier
     fun wordFrac(i: Int): Float {
         val start = lines[i].timeMs
         val next = if (i + 1 < lines.size) lines[i + 1].timeMs else start + 6000L
+        val gap = max(1L, next - start)
         val chars = lines[i].text.length
-        val dur = min(next - start, max(1500L, chars * 110L)).coerceAtLeast(300L)
+        // Normalmente una linea dura hasta que empieza la siguiente: se usa casi todo ese
+        // tiempo. Solo si hay un silencio largo (instrumental) se limita al canto normal.
+        val natural = max(1800L, chars * 150L)
+        val dur = if (gap <= natural * 1.8f) gap * 0.95f else natural * 1.1f
         return ((nowMs() - start).toFloat() / dur).coerceIn(0f, 1f)
     }
 
@@ -234,7 +280,7 @@ private fun SyncedLyrics(holder: PlayerHolder, lyr: Lyrics, look: Look, modifier
         itemsIndexed(lines) { i, line ->
             val mode = if (i == idx) 1 else if (i < idx) 2 else 0
             LyricRow(line.text, mode, { wordFrac(i) }, look) {
-                if (line.timeMs >= 0L) holder.seekTo(line.timeMs)
+                if (canSeek && line.timeMs >= 0L) holder.seekTo(line.timeMs)
             }
         }
     }
@@ -247,7 +293,19 @@ private fun LyricRow(text: String, mode: Int, frac: () -> Float, look: Look, onC
     val words = remember(shown) { shown.split(" ").filter { it.isNotEmpty() } }
     val sung by remember(words, mode) {
         derivedStateOf {
-            if (mode != 1) 0 else ceil(frac() * words.size).toInt().coerceIn(0, words.size)
+            if (mode != 1) {
+                0
+            } else {
+                val f = frac()
+                val total = max(1, words.sumOf { it.length + 1 })
+                var cum = 0
+                var count = 0
+                for (w in words) {
+                    if (cum.toFloat() / total < f) count++ else break
+                    cum += w.length + 1
+                }
+                count
+            }
         }
     }
     val styled: AnnotatedString = if (mode == 1) {
@@ -277,24 +335,10 @@ private fun LyricRow(text: String, mode: Int, frac: () -> Float, look: Look, onC
 }
 
 @Composable
-private fun PlainLyrics(lyr: Lyrics, modifier: Modifier) {
-    LazyColumn(modifier, contentPadding = PaddingValues(top = 4.dp, bottom = 200.dp)) {
-        item {
-            Text(
-                "Letra sin sincronizar",
-                color = C.Mute,
-                fontSize = 12.sp,
-                modifier = Modifier.padding(bottom = 10.dp)
-            )
-        }
+private fun PlainLyrics(lyr: Lyrics, look: Look, modifier: Modifier) {
+    LazyColumn(modifier, contentPadding = PaddingValues(top = 8.dp, bottom = 220.dp)) {
         itemsIndexed(lyr.lines) { _, l ->
-            Text(
-                if (l.text.isBlank()) " " else l.text,
-                color = C.Text.copy(alpha = 0.88f),
-                fontSize = 19.sp,
-                lineHeight = 27.sp,
-                modifier = Modifier.padding(vertical = 3.dp)
-            )
+            LyricRow(l.text, 0, { 0f }, look) {}
         }
     }
 }
