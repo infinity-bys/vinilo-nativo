@@ -6,7 +6,13 @@ import java.io.File
 /** Una linea de letra. timeMs = -1 cuando la letra no esta sincronizada. */
 class LyricLine(val timeMs: Long, val text: String)
 
-class Lyrics(val lines: List<LyricLine>, val synced: Boolean, val estimated: Boolean = false)
+class Lyrics(
+    val lines: List<LyricLine>,
+    val synced: Boolean,
+    val estimated: Boolean = false,
+    /** Desfase guardado en la letra: positivo = la letra sale antes. */
+    val offsetMs: Long = 0L
+)
 
 /** Lee letras en formato LRC ([01:23.45] texto) o texto simple. */
 object LyricsParser {
@@ -39,7 +45,7 @@ object LyricsParser {
             }
         }
         if (timed.isNotEmpty()) {
-            return Lyrics(timed.sortedBy { it.timeMs }, true)
+            return Lyrics(timed.sortedBy { it.timeMs }, true, false, offset)
         }
 
         // Texto simple: se quitan etiquetas como [ar:Artista] y los vacios de los extremos
@@ -51,6 +57,30 @@ object LyricsParser {
         val lines = if (start < 0) emptyList() else plain.subList(start, end + 1)
         return Lyrics(lines.map { LyricLine(-1L, it) }, false)
     }
+
+    /** Suma `deltaMs` al desfase de la letra ([offset:+500] = la letra sale 0,5 s antes). */
+    fun shift(raw: String, deltaMs: Long): String {
+        val cur = offsetTag.find(raw)?.groupValues?.get(1)?.toLongOrNull() ?: 0L
+        val next = cur + deltaMs
+        val tag = "[offset:" + (if (next >= 0L) "+" else "") + next + "]"
+        return if (offsetTag.containsMatchIn(raw)) raw.replaceFirst(offsetTag, tag) else tag + "\n" + raw
+    }
+
+    /** Arma un LRC con las lineas y los tiempos (ms) que marco el usuario. */
+    fun toLrc(texts: List<String>, times: List<Long>): String {
+        val sb = StringBuilder()
+        for (i in texts.indices) {
+            val t = times.getOrNull(i) ?: continue
+            val m = t / 60000L
+            val s = (t % 60000L) / 1000L
+            val cs = (t % 1000L) / 10L
+            sb.append('[').append(m.toString().padStart(2, '0')).append(':')
+                .append(s.toString().padStart(2, '0')).append('.')
+                .append(cs.toString().padStart(2, '0')).append(']')
+                .append(texts[i]).append('\n')
+        }
+        return sb.toString()
+    }
 }
 
 /** Guarda la letra de cada cancion en un archivo propio dentro de la app. */
@@ -59,6 +89,15 @@ object LyricsStore {
         val dir = File(context.filesDir, "lyrics")
         if (!dir.exists()) dir.mkdirs()
         return File(dir, "$id.txt")
+    }
+
+    fun loadRaw(context: Context, id: Long): String? {
+        val f = file(context, id)
+        return try {
+            if (f.exists()) f.readText() else null
+        } catch (e: Exception) {
+            null
+        }
     }
 
     fun load(context: Context, id: Long): Lyrics? {

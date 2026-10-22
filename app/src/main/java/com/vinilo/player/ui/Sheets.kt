@@ -972,14 +972,61 @@ fun NameSheet(title: String, initial: String, okText: String, onOk: (String) -> 
 // Letras: agregar / cambiar, buscar en linea, pegar
 // ---------------------------------------------------------------------------
 @Composable
+private fun ShiftBtn(text: String, modifier: Modifier, onClick: () -> Unit) {
+    val shape = RoundedCornerShape(14.dp)
+    Box(
+        modifier
+            .clip(shape)
+            .border(1.dp, C.Line, shape)
+            .clickable(onClick = onClick)
+            .padding(vertical = 12.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(text, color = C.Text, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+    }
+}
+
+@Composable
 fun LyricsAddSheet(
     hasLyrics: Boolean,
+    offsetMs: Long?,
+    onShift: (Long) -> Unit,
     onOnline: () -> Unit,
     onLocal: () -> Unit,
     onPaste: () -> Unit,
     onDelete: () -> Unit
 ) {
     SheetTitle(if (hasLyrics) "Cambiar la letra" else "Agregar letra")
+    if (offsetMs != null) {
+        // Para letras sincronizadas que van adelantadas o atrasadas respecto a la voz
+        val secs = offsetMs / 1000.0
+        val txt = (if (secs > 0) "+" else "") + String.format(java.util.Locale.US, "%.1f", secs) + " s"
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .padding(start = 4.dp, end = 4.dp, bottom = 12.dp)
+        ) {
+            Text("Ajustar tiempo de la letra", color = C.Text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+            Text(
+                "Si la letra va adelantada a la voz, toca Retrasar. Si va atrasada, toca Adelantar.",
+                color = C.Mute,
+                fontSize = 12.sp,
+                modifier = Modifier.padding(top = 2.dp, bottom = 8.dp)
+            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                ShiftBtn("Retrasar 0.5 s", Modifier.weight(1f)) { onShift(-500L) }
+                Text(
+                    txt,
+                    color = if (offsetMs != 0L) C.Acc else C.Mute,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 14.sp,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    modifier = Modifier.width(64.dp)
+                )
+                ShiftBtn("Adelantar 0.5 s", Modifier.weight(1f)) { onShift(500L) }
+            }
+        }
+    }
     SheetRow("Buscar en línea", onOnline, icon = R.drawable.ic_search)
     SheetRow("Añadir letras locales (.lrc o .txt)", onLocal, icon = R.drawable.ic_playlist_add)
     SheetRow("Pegar o escribir la letra", onPaste, icon = R.drawable.ic_edit)

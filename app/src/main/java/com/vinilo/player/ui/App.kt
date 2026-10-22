@@ -57,6 +57,7 @@ import com.vinilo.player.data.LrcResult
 import com.vinilo.player.data.Library
 import com.vinilo.player.data.Lyrics
 import com.vinilo.player.data.LyricsApi
+import com.vinilo.player.data.LyricsParser
 import com.vinilo.player.data.LyricsStore
 import com.vinilo.player.data.Playlist
 import com.vinilo.player.data.Song
@@ -335,7 +336,14 @@ fun VinyloApp(holder: PlayerHolder) {
             sheet = Sheet.LyricsResults
             runSearch(null)
         },
-        onEdit = { sheet = Sheet.LyricsAdd }
+        onEdit = { sheet = Sheet.LyricsAdd },
+        onSaveSynced = { raw ->
+            val cs = current
+            if (cs != null) {
+                saveLyrics(cs.id, raw)
+                toast("Letra sincronizada")
+            }
+        }
     )
 
     BackHandler(enabled = sel != null || showPlayer || plSelId != null || filter != 0) {
@@ -542,6 +550,17 @@ fun VinyloApp(holder: PlayerHolder) {
 
                     is Sheet.LyricsAdd -> LyricsAddSheet(
                     hasLyrics = lyrics != null,
+                    offsetMs = if (lyrics != null && lyrics.synced) lyrics.offsetMs else null,
+                    onShift = { delta ->
+                        val cs = current
+                        if (cs != null) {
+                            val raw = LyricsStore.loadRaw(context, cs.id)
+                            if (raw != null) {
+                                LyricsStore.save(context, cs.id, LyricsParser.shift(raw, delta))
+                                lyricsVersion++
+                            }
+                        }
+                    },
                     onOnline = {
                         sheet = Sheet.LyricsResults
                         runSearch(null)
