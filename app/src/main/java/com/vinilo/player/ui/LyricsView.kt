@@ -1,6 +1,8 @@
 package com.vinilo.player.ui
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -57,6 +59,7 @@ class LyricsUi(
 )
 
 /** Pantalla de letras: cabecera + letra (o "sin letras"). */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun LyricsPanel(holder: PlayerHolder, ui: LyricsUi, song: Song?, look: Look, modifier: Modifier = Modifier) {
     Column(modifier) {
@@ -77,7 +80,8 @@ fun LyricsPanel(holder: PlayerHolder, ui: LyricsUi, song: Song?, look: Look, mod
                     fontWeight = FontWeight.Bold,
                     fontSize = 18.sp,
                     maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    softWrap = false,
+                    modifier = Modifier.basicMarquee(iterations = Int.MAX_VALUE)
                 )
                 Text(
                     if (holder.artist.isNotEmpty()) holder.artist else song?.artist ?: "",
@@ -88,7 +92,8 @@ fun LyricsPanel(holder: PlayerHolder, ui: LyricsUi, song: Song?, look: Look, mod
                 )
             }
             if (ui.lyrics != null) {
-                IconBtn(R.drawable.ic_edit, "Cambiar letra", ui.onEdit, tint = C.Mute)
+                IconBtn(R.drawable.ic_search, "Buscar otra letra", ui.onSearch, tint = C.Mute)
+                IconBtn(R.drawable.ic_edit, "Opciones de la letra", ui.onEdit, tint = C.Mute)
             }
         }
         val lyr = ui.lyrics

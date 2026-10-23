@@ -1,8 +1,10 @@
 package com.vinilo.player.ui
 
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -149,6 +151,7 @@ fun Sw(on: Boolean) {
 }
 
 /** Fila de las hojas (ajustes, menu, ordenar...). */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun SheetRow(
     label: String,
@@ -172,14 +175,17 @@ fun SheetRow(
         if (icon != null) {
             Icon(painterResource(icon), null, tint = C.Acc, modifier = Modifier.size(22.dp))
         }
+        // Si el nombre no cabe, se desplaza solo para poder leerlo completo
         Text(
             label,
-            modifier = Modifier.weight(1f),
+            modifier = Modifier
+                .weight(1f)
+                .basicMarquee(iterations = Int.MAX_VALUE),
             color = if (danger) C.Acc2 else if (selected) C.Acc else C.Text,
             fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
             fontSize = 15.sp,
             maxLines = 1,
-            overflow = TextOverflow.Ellipsis
+            softWrap = false
         )
         if (value != null) {
             Text(value, color = C.Mute, fontSize = 14.sp, maxLines = 1)

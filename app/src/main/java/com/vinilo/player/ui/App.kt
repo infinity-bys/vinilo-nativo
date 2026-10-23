@@ -93,7 +93,6 @@ sealed interface Sheet {
     data object PlayerMenu : Sheet
     data object LyricsAdd : Sheet
     data object LyricsResults : Sheet
-    class LyricsClip(val text: String) : Sheet
     class AddTo(val ids: List<Long>) : Sheet
     class Name(val title: String, val initial: String, val okText: String, val onOk: (String) -> Unit) : Sheet
 }
@@ -269,6 +268,8 @@ fun VinyloApp(holder: PlayerHolder) {
     var lyricResults by remember { mutableStateOf<List<LrcResult>?>(null) }
     val triedAuto = remember { mutableSetOf<Long>() }
     var pasteOpen by remember { mutableStateOf(false) }
+    var pasteInitial by remember { mutableStateOf("") }
+    var pasteTitle by remember { mutableStateOf("Pegar o escribir la letra") }
     // 0 = nada, 1 = se abrio Google, 2 = el usuario esta fuera de la app buscando
     var clipState by remember { mutableIntStateOf(0) }
     val windowInfo = LocalWindowInfo.current
@@ -367,10 +368,27 @@ fun VinyloApp(holder: PlayerHolder) {
                 ""
             }
             if (txt.length >= 80 && txt.contains('\n')) {
-                sheet = Sheet.LyricsClip(txt)
+                // lo copiado se abre en el editor, para revisarlo y corregirlo antes de guardar
+                pasteInitial = txt
+                pasteTitle = "Revisar y editar la letra"
+                pasteOpen = true
             } else {
                 toast("No encontré una letra copiada")
             }
+        }
+    }
+
+    // "Editar letra": abre el editor con la letra actual (o el menu para agregarla si no hay)
+    fun editLyrics() {
+        val cs = current ?: return
+        val raw = LyricsStore.loadRaw(context, cs.id)
+        if (raw != null) {
+            pasteInitial = raw
+            pasteTitle = "Editar letra"
+            sheet = null
+            pasteOpen = true
+        } else {
+            sheet = Sheet.LyricsAdd
         }
     }
 
@@ -533,6 +551,8 @@ fun VinyloApp(holder: PlayerHolder) {
         // ---------- Pegar o escribir una letra ----------
         if (pasteOpen) {
             LyricsPasteScreen(
+                initial = pasteInitial,
+                title = pasteTitle,
                 onClose = { pasteOpen = false },
                 onSave = { text ->
                     val cs = current
@@ -574,6 +594,7 @@ fun VinyloApp(holder: PlayerHolder) {
                         onAdd = {
                             if (holder.currentId != -1L) sheet = Sheet.AddTo(listOf(holder.currentId))
                         },
+                        onEditLyrics = { editLyrics() },
                         onSpeed = { v -> holder.applySpeed(v) },
                         onHide = {
                             hideSongs(listOf(holder.currentId))
@@ -603,16 +624,24 @@ fun VinyloApp(holder: PlayerHolder) {
 
                     is Sheet.LyricsAdd -> LyricsAddSheet(
                         hasLyrics = lyrics != null,
-                        onGoogle = { openGoogle() },
-                        onOnline = {
+                        onSearch = {
                             sheet = Sheet.LyricsResults
                             runSearch(null)
+                        },
+                        onEditLyrics = {
+                            val cs = current
+                            pasteInitial = if (cs != null) LyricsStore.loadRaw(context, cs.id) ?: "" else ""
+                            pasteTitle = "Editar letra"
+                            sheet = null
+                            pasteOpen = true
                         },
                         onLocal = {
                             sheet = null
                             lrcLauncher.launch(arrayOf("*/*"))
                         },
                         onPaste = {
+                            pasteInitial = ""
+                            pasteTitle = "Pegar o escribir la letra"
                             sheet = null
                             pasteOpen = true
                         },
@@ -642,19 +671,6 @@ fun VinyloApp(holder: PlayerHolder) {
                             sheet = null
                         },
                         onGoogle = { openGoogle() }
-                    )
-
-                    is Sheet.LyricsClip -> LyricsClipSheet(
-                        preview = s.text,
-                        onUse = {
-                            val cs = current
-                            if (cs != null) {
-                                saveLyrics(cs.id, s.text)
-                                toast("Letra agregada")
-                            }
-                            sheet = null
-                        },
-                        onCancel = { sheet = null }
                     )
 
                 is Sheet.Name -> NameSheet(s.title, s.initial, s.okText) { name -> s.onOk(name) }

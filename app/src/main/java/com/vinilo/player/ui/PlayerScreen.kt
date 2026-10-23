@@ -581,6 +581,7 @@ fun speedText(v: Float): String = if (v == 1f) "Normal" else (v.toString().remov
 // ---------------------------------------------------------------------------
 // Mini reproductor (abajo de la lista)
 // ---------------------------------------------------------------------------
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun MiniPlayer(holder: PlayerHolder, song: Song?, look: Look, onOpen: () -> Unit) {
     val rot = remember { Animatable(0f) }
@@ -647,12 +648,14 @@ fun MiniPlayer(holder: PlayerHolder, song: Song?, look: Look, onOpen: () -> Unit
                 }
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
+                    // si el nombre no cabe, se desplaza solo para leerlo completo
                     Text(
                         if (holder.title.isNotEmpty()) holder.title else song?.title ?: "",
                         color = C.Text,
                         fontWeight = FontWeight.SemiBold,
                         maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        softWrap = false,
+                        modifier = Modifier.basicMarquee(iterations = Int.MAX_VALUE)
                     )
                     Text("Toca para abrir", color = C.Mute, fontSize = 12.sp)
                 }

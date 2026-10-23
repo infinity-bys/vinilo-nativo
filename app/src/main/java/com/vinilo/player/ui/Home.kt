@@ -2,6 +2,7 @@ package com.vinilo.player.ui
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -144,7 +145,9 @@ private fun SongRow(
                 color = if (isCurrent) C.Acc else C.Text,
                 fontSize = 15.sp,
                 maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                softWrap = !isCurrent,
+                overflow = if (isCurrent) TextOverflow.Clip else TextOverflow.Ellipsis,
+                modifier = if (isCurrent) Modifier.basicMarquee(iterations = Int.MAX_VALUE) else Modifier
             )
             Text(
                 if (song.artist.isNotBlank()) song.artist else fmtSize(song.size),

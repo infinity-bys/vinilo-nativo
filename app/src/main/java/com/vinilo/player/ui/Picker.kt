@@ -38,6 +38,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -186,9 +187,17 @@ fun SongPicker(
  * asi que el teclado nunca lo tapa.
  */
 @Composable
-fun LyricsPasteScreen(onClose: () -> Unit, onSave: (String) -> Unit) {
-    var text by remember { mutableStateOf("") }
+fun LyricsPasteScreen(
+    initial: String,
+    title: String,
+    onClose: () -> Unit,
+    onSave: (String) -> Unit
+) {
+    // el cursor empieza arriba, para editar letras largas desde el principio
+    var tf by remember { mutableStateOf(TextFieldValue(initial)) }
+    val text = tf.text
     val ok = text.isNotBlank()
+    val hasTimes = remember(initial) { Regex("\\[\\d{1,3}:\\d{2}").containsMatchIn(initial) }
     val focus = remember { FocusRequester() }
     val shape = RoundedCornerShape(16.dp)
     BackHandler { onClose() }
@@ -215,7 +224,7 @@ fun LyricsPasteScreen(onClose: () -> Unit, onSave: (String) -> Unit) {
         ) {
             IconBtn(R.drawable.ic_close, "Cerrar", onClose)
             Text(
-                "Pegar o escribir la letra",
+                title,
                 color = C.Text,
                 fontSize = 18.sp,
                 fontWeight = FontWeight.SemiBold,
@@ -234,6 +243,14 @@ fun LyricsPasteScreen(onClose: () -> Unit, onSave: (String) -> Unit) {
                 Text("Guardar", color = if (ok) C.Bg else C.Mute, fontWeight = FontWeight.Bold)
             }
         }
+        if (hasTimes) {
+            Text(
+                "Los tiempos como [01:23.45] hacen que la letra baje sola: déjalos como están.",
+                color = C.Mute,
+                fontSize = 12.sp,
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 2.dp)
+            )
+        }
         Box(
             Modifier
                 .weight(1f)
@@ -248,8 +265,8 @@ fun LyricsPasteScreen(onClose: () -> Unit, onSave: (String) -> Unit) {
                 Text("Pega aquí la letra…", color = C.Mute, fontSize = 16.sp)
             }
             BasicTextField(
-                value = text,
-                onValueChange = { text = it },
+                value = tf,
+                onValueChange = { tf = it },
                 textStyle = TextStyle(color = C.Text, fontSize = 17.sp),
                 cursorBrush = SolidColor(C.Acc),
                 modifier = Modifier

@@ -327,7 +327,7 @@ fun SettingsSheet(
             }
             SheetRow("Temporizador de apagado", { page = "sleep" }, icon = R.drawable.ic_timer, value = sleepText)
             SheetRow(
-                "Botones con colores de la carátula",
+                "Color de carátula",
                 { store.changeAccentOn(!store.accentOn) },
                 icon = R.drawable.ic_palette,
                 trailing = { Sw(store.accentOn) }
@@ -783,6 +783,7 @@ fun PlayerMenuSheet(
     song: Song?,
     store: Store,
     onAdd: () -> Unit,
+    onEditLyrics: () -> Unit,
     onSpeed: (Float) -> Unit,
     onHide: () -> Unit,
     close: () -> Unit
@@ -834,6 +835,7 @@ fun PlayerMenuSheet(
             }
         }
         SheetRow("Agregar a una playlist", onAdd, icon = R.drawable.ic_playlist_add)
+        SheetRow("Editar letra", onEditLyrics, icon = R.drawable.ic_edit)
         SheetRow(
             "Velocidad",
             { page = "speed" },
@@ -974,17 +976,23 @@ fun NameSheet(title: String, initial: String, okText: String, onOk: (String) -> 
 @Composable
 fun LyricsAddSheet(
     hasLyrics: Boolean,
-    onGoogle: () -> Unit,
-    onOnline: () -> Unit,
+    onEditLyrics: () -> Unit,
+    onSearch: () -> Unit,
     onLocal: () -> Unit,
     onPaste: () -> Unit,
     onDelete: () -> Unit
 ) {
     SheetTitle(if (hasLyrics) "Cambiar la letra" else "Agregar letra")
-    SheetRow("Buscar en Google (copiar y se agrega sola)", onGoogle, icon = R.drawable.ic_search)
-    SheetRow("Buscar en la base de datos en línea", onOnline, icon = R.drawable.ic_lyrics)
+    if (hasLyrics) {
+        SheetRow("Editar letra", onEditLyrics, icon = R.drawable.ic_edit)
+    }
+    SheetRow(
+        if (hasLyrics) "Buscar otra letra" else "Buscar en línea o en Google",
+        onSearch,
+        icon = R.drawable.ic_search
+    )
+    SheetRow("Pegar o escribir la letra", onPaste, icon = R.drawable.ic_lyrics)
     SheetRow("Añadir letras locales (.lrc o .txt)", onLocal, icon = R.drawable.ic_playlist_add)
-    SheetRow("Pegar o escribir la letra", onPaste, icon = R.drawable.ic_edit)
     if (hasLyrics) {
         SheetRow("Quitar la letra", onDelete, icon = R.drawable.ic_delete, danger = true)
     }
@@ -1106,54 +1114,6 @@ fun LyricsResultsSheet(
                     }
                 }
             }
-        }
-    }
-}
-
-/** "Copiaste una letra: usarla?" (despues de buscar en Google). */
-@Composable
-fun LyricsClipSheet(preview: String, onUse: () -> Unit, onCancel: () -> Unit) {
-    val shape = RoundedCornerShape(16.dp)
-    SheetTitle("¿Usar la letra copiada?")
-    Box(
-        Modifier
-            .fillMaxWidth()
-            .clip(shape)
-            .background(C.Bg)
-            .border(1.dp, C.Line, shape)
-            .padding(14.dp)
-    ) {
-        Text(
-            preview,
-            color = C.Text,
-            fontSize = 15.sp,
-            maxLines = 8,
-            overflow = TextOverflow.Ellipsis
-        )
-    }
-    Spacer(Modifier.height(14.dp))
-    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        Box(
-            Modifier
-                .weight(1f)
-                .clip(shape)
-                .border(1.dp, C.Line, shape)
-                .clickable(onClick = onCancel)
-                .padding(15.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Text("Cancelar", color = C.Text, fontWeight = FontWeight.SemiBold)
-        }
-        Box(
-            Modifier
-                .weight(1f)
-                .clip(shape)
-                .background(Brush.linearGradient(listOf(C.Acc, C.Acc2)))
-                .clickable(onClick = onUse)
-                .padding(15.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Text("Usar como letra", color = C.Bg, fontWeight = FontWeight.Bold)
         }
     }
 }
