@@ -969,65 +969,20 @@ fun NameSheet(title: String, initial: String, okText: String, onOk: (String) -> 
 }
 
 // ---------------------------------------------------------------------------
-// Letras: agregar / cambiar, buscar en linea, pegar
+// Letras: agregar / cambiar, buscar en Google, buscar en linea, copiado
 // ---------------------------------------------------------------------------
-@Composable
-private fun ShiftBtn(text: String, modifier: Modifier, onClick: () -> Unit) {
-    val shape = RoundedCornerShape(14.dp)
-    Box(
-        modifier
-            .clip(shape)
-            .border(1.dp, C.Line, shape)
-            .clickable(onClick = onClick)
-            .padding(vertical = 12.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(text, color = C.Text, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-    }
-}
-
 @Composable
 fun LyricsAddSheet(
     hasLyrics: Boolean,
-    offsetMs: Long?,
-    onShift: (Long) -> Unit,
+    onGoogle: () -> Unit,
     onOnline: () -> Unit,
     onLocal: () -> Unit,
     onPaste: () -> Unit,
     onDelete: () -> Unit
 ) {
     SheetTitle(if (hasLyrics) "Cambiar la letra" else "Agregar letra")
-    if (offsetMs != null) {
-        // Para letras sincronizadas que van adelantadas o atrasadas respecto a la voz
-        val secs = offsetMs / 1000.0
-        val txt = (if (secs > 0) "+" else "") + String.format(java.util.Locale.US, "%.1f", secs) + " s"
-        Column(
-            Modifier
-                .fillMaxWidth()
-                .padding(start = 4.dp, end = 4.dp, bottom = 12.dp)
-        ) {
-            Text("Ajustar tiempo de la letra", color = C.Text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
-            Text(
-                "Si la letra va adelantada a la voz, toca Retrasar. Si va atrasada, toca Adelantar.",
-                color = C.Mute,
-                fontSize = 12.sp,
-                modifier = Modifier.padding(top = 2.dp, bottom = 8.dp)
-            )
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                ShiftBtn("Retrasar 0.5 s", Modifier.weight(1f)) { onShift(-500L) }
-                Text(
-                    txt,
-                    color = if (offsetMs != 0L) C.Acc else C.Mute,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 14.sp,
-                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                    modifier = Modifier.width(64.dp)
-                )
-                ShiftBtn("Adelantar 0.5 s", Modifier.weight(1f)) { onShift(500L) }
-            }
-        }
-    }
-    SheetRow("Buscar en línea", onOnline, icon = R.drawable.ic_search)
+    SheetRow("Buscar en Google (copiar y se agrega sola)", onGoogle, icon = R.drawable.ic_search)
+    SheetRow("Buscar en la base de datos en línea", onOnline, icon = R.drawable.ic_lyrics)
     SheetRow("Añadir letras locales (.lrc o .txt)", onLocal, icon = R.drawable.ic_playlist_add)
     SheetRow("Pegar o escribir la letra", onPaste, icon = R.drawable.ic_edit)
     if (hasLyrics) {
@@ -1041,11 +996,41 @@ fun LyricsResultsSheet(
     results: List<LrcResult>?,
     busy: Boolean,
     onSearch: (String) -> Unit,
-    onPick: (LrcResult) -> Unit
+    onPick: (LrcResult) -> Unit,
+    onGoogle: () -> Unit
 ) {
     var q by remember { mutableStateOf(initialQuery) }
     val shape = RoundedCornerShape(16.dp)
     SheetTitle("Buscar letra")
+
+    // Opcion principal: buscar en Google, copiar la letra y volver
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(Brush.linearGradient(listOf(C.Acc, C.Acc2)))
+            .clickable(onClick = onGoogle)
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(painterResource(R.drawable.ic_search), null, tint = C.Bg, modifier = Modifier.size(24.dp))
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text("Buscar en Google", color = C.Bg, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+            Text(
+                "Copia la letra y vuelve aquí: se agrega sola.",
+                color = C.Bg.copy(alpha = 0.8f),
+                fontSize = 12.sp
+            )
+        }
+    }
+    Spacer(Modifier.height(14.dp))
+    Text(
+        "O busca en la base de datos en línea:",
+        color = C.Mute,
+        fontSize = 13.sp,
+        modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
+    )
     Row(
         Modifier
             .fillMaxWidth()
@@ -1081,7 +1066,7 @@ fun LyricsResultsSheet(
         }
         results.isEmpty() -> {
             Text(
-                "No encontré letras. Prueba con otro nombre.",
+                "No encontré letras aquí. Prueba con Buscar en Google.",
                 color = C.Mute,
                 fontSize = 14.sp,
                 modifier = Modifier.padding(12.dp)
@@ -1111,20 +1096,13 @@ fun LyricsResultsSheet(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
-                    Row(Modifier.padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    if (r.durationSec > 0) {
                         Text(
-                            if (r.hasSynced) "Sincronizada" else "Sin sincronizar",
-                            color = if (r.hasSynced) C.Acc else C.Mute,
+                            fmtTime(r.durationSec * 1000L),
+                            color = C.Mute,
                             fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold
+                            modifier = Modifier.padding(top = 2.dp)
                         )
-                        if (r.durationSec > 0) {
-                            Text(
-                                "  ·  " + fmtTime(r.durationSec * 1000L),
-                                color = C.Mute,
-                                fontSize = 12.sp
-                            )
-                        }
                     }
                 }
             }
@@ -1132,56 +1110,50 @@ fun LyricsResultsSheet(
     }
 }
 
+/** "Copiaste una letra: usarla?" (despues de buscar en Google). */
 @Composable
-fun LyricsPasteSheet(onSave: (String) -> Unit) {
-    var text by remember { mutableStateOf("") }
-    val ok = text.isNotBlank()
+fun LyricsClipSheet(preview: String, onUse: () -> Unit, onCancel: () -> Unit) {
     val shape = RoundedCornerShape(16.dp)
-    SheetTitle("Pegar o escribir la letra")
+    SheetTitle("¿Usar la letra copiada?")
     Box(
         Modifier
             .fillMaxWidth()
-            .height(240.dp)
             .clip(shape)
             .background(C.Bg)
             .border(1.dp, C.Line, shape)
             .padding(14.dp)
     ) {
-        if (text.isEmpty()) {
-            Text("Pega aquí la letra…", color = C.Mute, fontSize = 16.sp)
-        }
-        BasicTextField(
-            value = text,
-            onValueChange = { text = it },
-            textStyle = TextStyle(color = C.Text, fontSize = 16.sp),
-            cursorBrush = SolidColor(C.Acc),
-            modifier = Modifier.fillMaxSize()
+        Text(
+            preview,
+            color = C.Text,
+            fontSize = 15.sp,
+            maxLines = 8,
+            overflow = TextOverflow.Ellipsis
         )
     }
-    Text(
-        "Si trae tiempos como [01:23.45] se sincroniza sola y se resalta mientras suena.",
-        color = C.Mute,
-        fontSize = 13.sp,
-        modifier = Modifier.padding(start = 4.dp, top = 8.dp, bottom = 14.dp)
-    )
-    Box(
-        Modifier
-            .fillMaxWidth()
-            .clip(shape)
-            .background(
-                Brush.linearGradient(
-                    if (ok) listOf(C.Acc, C.Acc2) else listOf(C.Line, C.Line)
-                )
-            )
-            .clickable(enabled = ok) { onSave(text) }
-            .padding(15.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            "Guardar letra",
-            color = if (ok) C.Bg else C.Mute,
-            fontWeight = FontWeight.Bold,
-            fontSize = 16.sp
-        )
+    Spacer(Modifier.height(14.dp))
+    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Box(
+            Modifier
+                .weight(1f)
+                .clip(shape)
+                .border(1.dp, C.Line, shape)
+                .clickable(onClick = onCancel)
+                .padding(15.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text("Cancelar", color = C.Text, fontWeight = FontWeight.SemiBold)
+        }
+        Box(
+            Modifier
+                .weight(1f)
+                .clip(shape)
+                .background(Brush.linearGradient(listOf(C.Acc, C.Acc2)))
+                .clickable(onClick = onUse)
+                .padding(15.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text("Usar como letra", color = C.Bg, fontWeight = FontWeight.Bold)
+        }
     }
 }

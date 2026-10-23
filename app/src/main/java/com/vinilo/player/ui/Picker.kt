@@ -2,6 +2,7 @@ package com.vinilo.player.ui
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
@@ -20,8 +21,10 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -29,9 +32,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -40,6 +46,7 @@ import androidx.compose.ui.unit.sp
 import com.vinilo.player.R
 import com.vinilo.player.data.Playlist
 import com.vinilo.player.data.Song
+import kotlinx.coroutines.delay
 
 /**
  * Pantalla para elegir canciones y meterlas en una playlist.
@@ -170,6 +177,85 @@ fun SongPicker(
                     }
                 }
             }
+        }
+    }
+}
+
+/**
+ * Pantalla completa para pegar o escribir una letra. El boton Guardar esta arriba,
+ * asi que el teclado nunca lo tapa.
+ */
+@Composable
+fun LyricsPasteScreen(onClose: () -> Unit, onSave: (String) -> Unit) {
+    var text by remember { mutableStateOf("") }
+    val ok = text.isNotBlank()
+    val focus = remember { FocusRequester() }
+    val shape = RoundedCornerShape(16.dp)
+    BackHandler { onClose() }
+    LaunchedEffect(Unit) {
+        delay(250L)
+        try {
+            focus.requestFocus()
+        } catch (e: Exception) {
+        }
+    }
+
+    Column(
+        Modifier
+            .fillMaxSize()
+            .background(C.Bg)
+            .windowInsetsPadding(WindowInsets.safeDrawing)
+            .pointerInput(Unit) { detectTapGestures { } }
+    ) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconBtn(R.drawable.ic_close, "Cerrar", onClose)
+            Text(
+                "Pegar o escribir la letra",
+                color = C.Text,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(start = 8.dp)
+            )
+            val bg: Brush = if (ok) Brush.linearGradient(listOf(C.Acc, C.Acc2)) else SolidColor(C.Line)
+            Box(
+                Modifier
+                    .clip(RoundedCornerShape(50))
+                    .background(bg)
+                    .clickable(enabled = ok) { onSave(text) }
+                    .padding(horizontal = 18.dp, vertical = 10.dp)
+            ) {
+                Text("Guardar", color = if (ok) C.Bg else C.Mute, fontWeight = FontWeight.Bold)
+            }
+        }
+        Box(
+            Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp)
+                .clip(shape)
+                .background(C.Panel)
+                .border(1.dp, C.Line, shape)
+                .padding(14.dp)
+        ) {
+            if (text.isEmpty()) {
+                Text("Pega aquí la letra…", color = C.Mute, fontSize = 16.sp)
+            }
+            BasicTextField(
+                value = text,
+                onValueChange = { text = it },
+                textStyle = TextStyle(color = C.Text, fontSize = 17.sp),
+                cursorBrush = SolidColor(C.Acc),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .focusRequester(focus)
+            )
         }
     }
 }
