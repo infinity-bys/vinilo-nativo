@@ -12,6 +12,7 @@ import androidx.media3.common.AudioAttributes
 import androidx.media3.common.audio.AudioProcessor
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.common.C
+import androidx.media3.common.ForwardingPlayer
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
@@ -211,7 +212,14 @@ class PlaybackService : MediaSessionService() {
             }
         })
 
-        val builder = MediaSession.Builder(this, player)
+        // Por defecto, el boton "anterior" de la notificacion (y de los audifonos) solo
+        // reinicia la cancion si ya sonaron mas de 3 s. Aqui siempre pasa a la anterior.
+        val forwarding = object : ForwardingPlayer(player) {
+            override fun seekToPrevious() {
+                seekToPreviousMediaItem()
+            }
+        }
+        val builder = MediaSession.Builder(this, forwarding)
         val launch = packageManager.getLaunchIntentForPackage(packageName)
         if (launch != null) {
             builder.setSessionActivity(

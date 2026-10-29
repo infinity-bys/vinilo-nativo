@@ -785,7 +785,9 @@ fun PlayerMenuSheet(
     onAdd: () -> Unit,
     onEditLyrics: () -> Unit,
     onSpeed: (Float) -> Unit,
+    onShare: () -> Unit,
     onHide: () -> Unit,
+    onDelete: () -> Unit,
     close: () -> Unit
 ) {
     var page by remember { mutableStateOf("menu") }
@@ -842,7 +844,9 @@ fun PlayerMenuSheet(
             icon = R.drawable.ic_speed,
             value = speedText(store.speed)
         )
+        SheetRow("Compartir", onShare, icon = R.drawable.ic_share)
         SheetRow("Ocultar canción", onHide, icon = R.drawable.ic_eye_off)
+        SheetRow("Eliminar canción", onDelete, icon = R.drawable.ic_delete, danger = true)
     }
 }
 

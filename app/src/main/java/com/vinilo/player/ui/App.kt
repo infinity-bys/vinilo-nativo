@@ -1,16 +1,19 @@
 package com.vinilo.player.ui
 
 import android.Manifest
+import android.app.Activity
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.net.Uri
+import android.provider.MediaStore
 import android.os.Build
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.slideInVertically
@@ -100,7 +103,14 @@ sealed interface Sheet {
 private val modeLabels = listOf("Repetir todas", "Repetir una", "Aleatorio")
 
 @Composable
-private fun SelActions(inPlaylist: Boolean, onAdd: () -> Unit, onHide: () -> Unit, onRemove: () -> Unit) {
+private fun SelActions(
+    inPlaylist: Boolean,
+    onAdd: () -> Unit,
+    onShare: () -> Unit,
+    onHide: () -> Unit,
+    onDelete: () -> Unit,
+    onRemove: () -> Unit
+) {
     @Composable
     fun Act(icon: Int, label: String, onClick: () -> Unit, modifier: Modifier) {
         Column(
@@ -111,7 +121,7 @@ private fun SelActions(inPlaylist: Boolean, onAdd: () -> Unit, onHide: () -> Uni
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Icon(painterResource(icon), null, tint = C.Acc, modifier = Modifier.size(22.dp))
-            Text(label, color = C.Text, fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp))
+            Text(label, color = C.Text, fontSize = 11.sp, maxLines = 1, modifier = Modifier.padding(top = 6.dp))
         }
     }
     Row(
@@ -123,7 +133,9 @@ private fun SelActions(inPlaylist: Boolean, onAdd: () -> Unit, onHide: () -> Uni
         horizontalArrangement = Arrangement.SpaceAround
     ) {
         Act(R.drawable.ic_playlist_add, "Agregar a", onAdd, Modifier.weight(1f))
+        Act(R.drawable.ic_share, "Compartir", onShare, Modifier.weight(1f))
         Act(R.drawable.ic_eye_off, "Ocultar", onHide, Modifier.weight(1f))
+        Act(R.drawable.ic_delete, "Eliminar", onDelete, Modifier.weight(1f))
         if (inPlaylist) Act(R.drawable.ic_close, "Quitar", onRemove, Modifier.weight(1f))
     }
 }
@@ -403,6 +415,75 @@ fun VinyloApp(holder: PlayerHolder) {
         onEdit = { sheet = Sheet.LyricsAdd }
     )
 
+    // ---------- Compartir y eliminar canciones ----------
+    var confirmDelete by remember { mutableStateOf<List<Song>>(emptyList()) }
+    var pendingDelete by remember { mutableStateOf<List<Long>>(emptyList()) }
+
+    // Lo que hay que limpiar cuando ya se borro de verdad
+    fun afterDeleted(ids: List<Long>) {
+        if (holder.currentId in ids) {
+            holder.stopAndClear()
+            showPlayer = false
+            lyricsOpen = false
+        }
+        for (id in ids) LyricsStore.delete(context, id)
+        sel = null
+        holder.resumeTick++
+        toast(if (ids.size == 1) "Canción eliminada" else ids.size.toString() + " canciones eliminadas")
+    }
+
+    val deleteLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { res ->
+        if (res.resultCode == Activity.RESULT_OK) afterDeleted(pendingDelete) else toast("No se eliminó")
+        pendingDelete = emptyList()
+    }
+
+    fun shareSongs(list: List<Song>) {
+        if (list.isEmpty()) return
+        val intent = if (list.size == 1) {
+            Intent(Intent.ACTION_SEND).apply {
+                type = "audio/*"
+                putExtra(Intent.EXTRA_STREAM, list[0].uri)
+            }
+        } else {
+            Intent(Intent.ACTION_SEND_MULTIPLE).apply {
+                type = "audio/*"
+                putParcelableArrayListExtra(Intent.EXTRA_STREAM, ArrayList(list.map { it.uri }))
+            }
+        }
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        try {
+            context.startActivity(Intent.createChooser(intent, "Compartir"))
+        } catch (e: Exception) {
+            toast("No pude compartir")
+        }
+    }
+
+    // En Android 11 o mas el sistema pide permiso para borrar; en Android 10 se intenta directo
+    fun deleteSongs(list: List<Song>) {
+        if (list.isEmpty()) return
+        val ids = list.map { it.id }
+        val uris = list.map { it.uri }
+        if (Build.VERSION.SDK_INT >= 30) {
+            try {
+                pendingDelete = ids
+                val pi = MediaStore.createDeleteRequest(context.contentResolver, uris)
+                deleteLauncher.launch(IntentSenderRequest.Builder(pi.intentSender).build())
+            } catch (e: Exception) {
+                pendingDelete = emptyList()
+                toast("No pude eliminar la canción")
+            }
+        } else {
+            var ok = 0
+            for (u in uris) {
+                try {
+                    if (context.contentResolver.delete(u, null, null) > 0) ok++
+                } catch (e: Exception) {
+                }
+            }
+            if (ok > 0) afterDeleted(ids) else toast("Android no me dejó eliminarla")
+        }
+    }
+
     BackHandler(enabled = sel != null || showPlayer || plSelId != null || filter != 0) {
         when {
             sel != null -> sel = null
@@ -484,6 +565,8 @@ fun VinyloApp(holder: PlayerHolder) {
                 SelActions(
                     inPlaylist = plSel != null && !plSel.id.startsWith("auto:"),
                     onAdd = { sheet = Sheet.AddTo(selectedIds()) },
+                    onShare = { shareSongs(selectedIds().mapNotNull { byId[it] }) },
+                    onDelete = { confirmDelete = selectedIds().mapNotNull { byId[it] } },
                     onHide = {
                         val ids = selectedIds()
                         sel = null
@@ -595,6 +678,14 @@ fun VinyloApp(holder: PlayerHolder) {
                             if (holder.currentId != -1L) sheet = Sheet.AddTo(listOf(holder.currentId))
                         },
                         onEditLyrics = { editLyrics() },
+                        onShare = {
+                            current?.let { shareSongs(listOf(it)) }
+                            sheet = null
+                        },
+                        onDelete = {
+                            current?.let { confirmDelete = listOf(it) }
+                            sheet = null
+                        },
                         onSpeed = { v -> holder.applySpeed(v) },
                         onHide = {
                             hideSongs(listOf(holder.currentId))
@@ -677,6 +768,50 @@ fun VinyloApp(holder: PlayerHolder) {
                 }
             }
         }
+    }
+
+    // ---------- Confirmar eliminar canciones ----------
+    if (confirmDelete.isNotEmpty()) {
+        val list = confirmDelete
+        AlertDialog(
+            onDismissRequest = { confirmDelete = emptyList() },
+            containerColor = C.Panel,
+            title = {
+                Text(
+                    if (list.size == 1) "¿Eliminar canción?" else "¿Eliminar " + list.size + " canciones?",
+                    color = C.Text
+                )
+            },
+            text = {
+                Text(
+                    if (list.size == 1) "«" + list[0].title + "» se borrará del teléfono para siempre."
+                    else "Se borrarán del teléfono para siempre.",
+                    color = C.Mute
+                )
+            },
+            confirmButton = {
+                Text(
+                    "Eliminar",
+                    color = C.Acc2,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier
+                        .clickable {
+                            confirmDelete = emptyList()
+                            deleteSongs(list)
+                        }
+                        .padding(12.dp)
+                )
+            },
+            dismissButton = {
+                Text(
+                    "Cancelar",
+                    color = C.Mute,
+                    modifier = Modifier
+                        .clickable { confirmDelete = emptyList() }
+                        .padding(12.dp)
+                )
+            }
+        )
     }
 
     // ---------- Confirmar borrar lista ----------
