@@ -1121,3 +1121,14 @@ fun LyricsResultsSheet(
         }
     }
 }
+
+// ---------------------------------------------------------------------------
+// "Mas" de la seleccion: reproducir a continuacion, cola, ocultar
+// ---------------------------------------------------------------------------
+@Composable
+fun SelMoreSheet(onNext: () -> Unit, onQueue: () -> Unit, onHide: () -> Unit) {
+    SheetTitle("Más opciones")
+    SheetRow("Reproducir a continuación", onNext, icon = R.drawable.ic_next)
+    SheetRow("Agregar al final de la cola", onQueue, icon = R.drawable.ic_queue)
+    SheetRow("Ocultar", onHide, icon = R.drawable.ic_eye_off)
+}

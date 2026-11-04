@@ -6,6 +6,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -16,10 +17,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.Text
@@ -35,6 +38,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.TextStyle
@@ -44,6 +48,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.vinilo.player.PlayerHolder
 import com.vinilo.player.R
 import com.vinilo.player.data.Playlist
 import com.vinilo.player.data.Song
@@ -273,6 +278,113 @@ fun LyricsPasteScreen(
                     .fillMaxSize()
                     .focusRequester(focus)
             )
+        }
+    }
+}
+
+/**
+ * Cola de reproduccion: lo que viene, con la que suena marcada.
+ * Tocar una cancion salta a ella; las flechas la suben o bajan; la X la quita.
+ */
+@Composable
+fun QueueScreen(holder: PlayerHolder, byId: Map<Long, Song>, onClose: () -> Unit) {
+    BackHandler { onClose() }
+    val ids = holder.queueIds
+    val cur = holder.queueIndex
+    val state = rememberLazyListState()
+    val shape = RoundedCornerShape(16.dp)
+    LaunchedEffect(Unit) {
+        if (cur > 1) state.scrollToItem(cur - 1)
+    }
+
+    Column(
+        Modifier
+            .fillMaxSize()
+            .background(C.Bg)
+            .windowInsetsPadding(WindowInsets.safeDrawing)
+            .pointerInput(Unit) { detectTapGestures { } }
+    ) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconBtn(R.drawable.ic_close, "Cerrar", onClose)
+            Column(
+                Modifier
+                    .weight(1f)
+                    .padding(start = 8.dp)
+            ) {
+                Text("Cola de reproducción", color = C.Text, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+                Text(plural(ids.size, "canción", "canciones"), color = C.Mute, fontSize = 12.sp)
+            }
+        }
+        if (ids.isEmpty()) {
+            EmptyCard(
+                "La cola está vacía",
+                "Reproduce una canción o agrega algunas con «Reproducir a continuación».",
+                Modifier.padding(16.dp)
+            )
+        } else {
+            LazyColumn(
+                Modifier
+                    .weight(1f)
+                    .fillMaxWidth(),
+                state = state,
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                itemsIndexed(ids, key = { i, id -> "$i-$id" }) { i, id ->
+                    val s = byId[id]
+                    val isCur = i == cur
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clip(shape)
+                            .background(C.Panel)
+                            .border(1.dp, if (isCur) C.Acc else Color.Transparent, shape)
+                            .clickable { holder.jumpTo(i) }
+                            .padding(start = 10.dp, top = 8.dp, bottom = 8.dp, end = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        if (s != null) {
+                            Cover(s, 46.dp)
+                        } else {
+                            Box(
+                                Modifier
+                                    .size(46.dp)
+                                    .clip(RoundedCornerShape(14.dp))
+                                    .background(C.Line)
+                            )
+                        }
+                        Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                s?.title ?: "Canción no disponible",
+                                color = if (isCur) C.Acc else C.Text,
+                                fontSize = 15.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Text(
+                                if (isCur) "Sonando ahora" else (s?.artist ?: ""),
+                                color = C.Mute,
+                                fontSize = 12.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                        if (i > 0) {
+                            IconBtn(R.drawable.ic_arrow_up, "Subir", { holder.moveItem(i, i - 1) }, tint = C.Mute, size = 36.dp, iconSize = 20.dp)
+                        }
+                        if (i < ids.size - 1) {
+                            IconBtn(R.drawable.ic_arrow_down, "Bajar", { holder.moveItem(i, i + 1) }, tint = C.Mute, size = 36.dp, iconSize = 20.dp)
+                        }
+                        IconBtn(R.drawable.ic_close, "Quitar de la cola", { holder.removeAt(i) }, tint = C.Mute, size = 36.dp, iconSize = 20.dp)
+                    }
+                }
+            }
         }
     }
 }

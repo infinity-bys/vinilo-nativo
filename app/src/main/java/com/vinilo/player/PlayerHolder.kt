@@ -15,6 +15,7 @@ import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
+import androidx.media3.common.Timeline
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import com.vinilo.player.data.Song
@@ -44,6 +45,11 @@ class PlayerHolder(private val context: Context) {
     var title by mutableStateOf("")
         private set
     var artist by mutableStateOf("")
+        private set
+    /** Cola de reproduccion: ids de las canciones en el orden de la lista. */
+    var queueIds by mutableStateOf<List<Long>>(emptyList())
+        private set
+    var queueIndex by mutableIntStateOf(-1)
         private set
     var positionMs by mutableLongStateOf(0L)
         private set
@@ -134,6 +140,10 @@ class PlayerHolder(private val context: Context) {
                         Spectrum.base = newPosition.positionMs
                     }
 
+                    override fun onTimelineChanged(timeline: Timeline, reason: Int) {
+                        refreshQueue()
+                    }
+
                     override fun onMediaMetadataChanged(mediaMetadata: MediaMetadata) {
                         sync(c.currentMediaItem)
                     }
@@ -153,6 +163,56 @@ class PlayerHolder(private val context: Context) {
         currentId = item?.mediaId?.toLongOrNull() ?: -1L
         title = item?.mediaMetadata?.title?.toString() ?: ""
         artist = item?.mediaMetadata?.artist?.toString() ?: ""
+        refreshQueue()
+    }
+
+    private fun refreshQueue() {
+        val c = controller ?: return
+        val n = c.mediaItemCount
+        queueIds = List(n) { i -> c.getMediaItemAt(i).mediaId.toLongOrNull() ?: -1L }
+        queueIndex = c.currentMediaItemIndex
+    }
+
+    /** Salta a una cancion de la cola y la reproduce. */
+    fun jumpTo(index: Int) {
+        val c = controller ?: return
+        if (index in 0 until c.mediaItemCount) {
+            c.seekToDefaultPosition(index)
+            c.play()
+        }
+    }
+
+    fun removeAt(index: Int) {
+        val c = controller ?: return
+        if (index in 0 until c.mediaItemCount) c.removeMediaItem(index)
+    }
+
+    fun moveItem(from: Int, to: Int) {
+        val c = controller ?: return
+        val n = c.mediaItemCount
+        if (from in 0 until n && to in 0 until n) c.moveMediaItem(from, to)
+    }
+
+    /** Pone las canciones justo despues de la que suena (si no hay nada, las reproduce). */
+    fun playNext(songs: List<Song>) {
+        val c = controller ?: return
+        if (songs.isEmpty()) return
+        if (c.mediaItemCount == 0) {
+            playList(songs, 0)
+            return
+        }
+        c.addMediaItems(c.currentMediaItemIndex + 1, songs.map { it.toMediaItem() })
+    }
+
+    /** Agrega las canciones al final de la cola. */
+    fun addToQueue(songs: List<Song>) {
+        val c = controller ?: return
+        if (songs.isEmpty()) return
+        if (c.mediaItemCount == 0) {
+            playList(songs, 0)
+            return
+        }
+        c.addMediaItems(songs.map { it.toMediaItem() })
     }
 
     /** Reproduce la lista desde la cancion indicada. */

@@ -224,6 +224,7 @@ fun HomeScreen(
     onAddSongs: (Playlist) -> Unit,
     onSelClose: () -> Unit,
     onSelAll: () -> Unit,
+    onShuffleAll: () -> Unit,
     onGrant: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -309,12 +310,29 @@ fun HomeScreen(
             else -> plural(totalVisible, "canción", "canciones")
         }
         if (countText.isNotEmpty() && sel == null) {
-            Text(
-                countText,
-                color = C.Mute,
-                fontSize = 13.sp,
-                modifier = Modifier.padding(start = 20.dp, bottom = 6.dp)
-            )
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(start = 20.dp, end = 16.dp, bottom = 6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(countText, color = C.Mute, fontSize = 13.sp, modifier = Modifier.weight(1f))
+                if (shown.isNotEmpty() && !(filter == 2 && plSel == null)) {
+                    val sh = RoundedCornerShape(50)
+                    Row(
+                        Modifier
+                            .clip(sh)
+                            .border(1.dp, C.Acc, sh)
+                            .clickable(onClick = onShuffleAll)
+                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(painterResource(R.drawable.ic_shuffle), null, tint = C.Acc, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Aleatorio", color = C.Acc, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
         }
 
         // ----- Contenido -----

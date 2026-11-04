@@ -414,7 +414,8 @@ fun PlayerScreen(
     onMode: () -> Unit,
     lyricsOpen: Boolean,
     onLyricsToggle: () -> Unit,
-    lyrics: LyricsUi
+    lyrics: LyricsUi,
+    onQueue: () -> Unit
 ) {
     val store = holder.store
     val bgTop by animateColorAsState(look.top, tween(600), label = "bgTop")
@@ -450,6 +451,7 @@ fun PlayerScreen(
                 textAlign = TextAlign.Center,
                 modifier = Modifier.weight(1f)
             )
+            IconBtn(R.drawable.ic_queue, "Cola de reproducción", onQueue, tint = C.Mute)
             IconBtn(
                 R.drawable.ic_tune, "Ajustes", onSettings,
                 tint = if (sleepOn) look.acc else C.Mute

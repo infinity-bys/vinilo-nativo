@@ -70,6 +70,7 @@ import com.vinilo.player.data.Playlist
 import com.vinilo.player.data.Song
 import com.vinilo.player.data.sortSongs
 import java.net.URLEncoder
+import kotlin.random.Random
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -94,6 +95,7 @@ sealed interface Sheet {
     data object Sort : Sheet
     data object Eq : Sheet
     data object PlayerMenu : Sheet
+    data object SelMore : Sheet
     data object LyricsAdd : Sheet
     data object LyricsResults : Sheet
     class AddTo(val ids: List<Long>) : Sheet
@@ -107,7 +109,7 @@ private fun SelActions(
     inPlaylist: Boolean,
     onAdd: () -> Unit,
     onShare: () -> Unit,
-    onHide: () -> Unit,
+    onMore: () -> Unit,
     onDelete: () -> Unit,
     onRemove: () -> Unit
 ) {
@@ -134,8 +136,8 @@ private fun SelActions(
     ) {
         Act(R.drawable.ic_playlist_add, "Agregar a", onAdd, Modifier.weight(1f))
         Act(R.drawable.ic_share, "Compartir", onShare, Modifier.weight(1f))
-        Act(R.drawable.ic_eye_off, "Ocultar", onHide, Modifier.weight(1f))
         Act(R.drawable.ic_delete, "Eliminar", onDelete, Modifier.weight(1f))
+        Act(R.drawable.ic_more, "Más", onMore, Modifier.weight(1f))
         if (inPlaylist) Act(R.drawable.ic_close, "Quitar", onRemove, Modifier.weight(1f))
     }
 }
@@ -280,6 +282,7 @@ fun VinyloApp(holder: PlayerHolder) {
     var lyricResults by remember { mutableStateOf<List<LrcResult>?>(null) }
     val triedAuto = remember { mutableSetOf<Long>() }
     var pasteOpen by remember { mutableStateOf(false) }
+    var queueOpen by remember { mutableStateOf(false) }
     var pasteInitial by remember { mutableStateOf("") }
     var pasteTitle by remember { mutableStateOf("Pegar o escribir la letra") }
     // 0 = nada, 1 = se abrio Google, 2 = el usuario esta fuera de la app buscando
@@ -557,6 +560,14 @@ fun VinyloApp(holder: PlayerHolder) {
                 onAddSongs = { p -> pickerFor = p.id },
                 onSelClose = { sel = null },
                 onSelAll = { sel = shown.map { it.id }.toSet() },
+                onShuffleAll = {
+                    if (shown.isNotEmpty()) {
+                        holder.applyMode(2)
+                        holder.playList(shown, Random.nextInt(shown.size))
+                        showPlayer = true
+                        toast("Reproducción aleatoria")
+                    }
+                },
                 onGrant = { launcher.launch(permissionsToAsk()) },
                 modifier = Modifier.weight(1f)
             )
@@ -567,11 +578,7 @@ fun VinyloApp(holder: PlayerHolder) {
                     onAdd = { sheet = Sheet.AddTo(selectedIds()) },
                     onShare = { shareSongs(selectedIds().mapNotNull { byId[it] }) },
                     onDelete = { confirmDelete = selectedIds().mapNotNull { byId[it] } },
-                    onHide = {
-                        val ids = selectedIds()
-                        sel = null
-                        hideSongs(ids)
-                    },
+                    onMore = { sheet = Sheet.SelMore },
                     onRemove = {
                         val p = plSel
                         if (p != null) {
@@ -614,7 +621,8 @@ fun VinyloApp(holder: PlayerHolder) {
                 },
                 lyricsOpen = lyricsOpen,
                 onLyricsToggle = { lyricsOpen = !lyricsOpen },
-                lyrics = lyricsUi
+                lyrics = lyricsUi,
+                onQueue = { queueOpen = true }
             )
         }
         // ---------- Elegir canciones para una playlist ----------
@@ -630,6 +638,10 @@ fun VinyloApp(holder: PlayerHolder) {
                     pickerFor = null
                 }
             )
+        }
+        // ---------- Cola de reproduccion ----------
+        if (queueOpen) {
+            QueueScreen(holder, byId) { queueOpen = false }
         }
         // ---------- Pegar o escribir una letra ----------
         if (pasteOpen) {
@@ -763,6 +775,29 @@ fun VinyloApp(holder: PlayerHolder) {
                         },
                         onGoogle = { openGoogle() }
                     )
+
+                is Sheet.SelMore -> SelMoreSheet(
+                    onNext = {
+                        val songs = selectedIds().mapNotNull { byId[it] }
+                        holder.playNext(songs)
+                        toast(if (songs.size == 1) "Se reproducirá a continuación" else songs.size.toString() + " canciones a continuación")
+                        sel = null
+                        sheet = null
+                    },
+                    onQueue = {
+                        val songs = selectedIds().mapNotNull { byId[it] }
+                        holder.addToQueue(songs)
+                        toast(if (songs.size == 1) "Agregada a la cola" else songs.size.toString() + " canciones agregadas a la cola")
+                        sel = null
+                        sheet = null
+                    },
+                    onHide = {
+                        val ids = selectedIds()
+                        sel = null
+                        sheet = null
+                        hideSongs(ids)
+                    }
+                )
 
                 is Sheet.Name -> NameSheet(s.title, s.initial, s.okText) { name -> s.onOk(name) }
                 }
